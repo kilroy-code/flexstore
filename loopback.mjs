@@ -52,6 +52,9 @@ class Collection {
     if ([true, 'team', 'owner'].includes(options.encryption)) options.encryption = team;
     return options;
   }
+  fail(operation, data, author) {
+    throw new Error(`${author} does not have the authority to ${operation} ${JSON.stringify(data)}.`);
+  }
   async store(data, options = {}) {
     const {encryption, tag, ...signingOptions} = this._canonicalizeOptions(options);
     // TODO: encrypt
@@ -59,7 +62,8 @@ class Collection {
     // No need to await synchronization.
     // TODO: put on all services
     const signature = await Credentials.sign(data, signingOptions);
-    return this.put(tag, signature);
+    return (await this.put(tag, signature)) ||
+      this.fail('store', data, options.member || options.tags[0]);
   }
   async remove(options = {}) { // Note: Really just replacing with empty data forever. Otherwise merging with earlier data will bring it back!
     // TODO: Provide some mechanism to really destroy something, and use it in tests.
@@ -68,7 +72,8 @@ class Collection {
     // TODO: emit update
     // No need to await synchronization
     // TODO: delete on all services.
-    return this.delete(tag, await Credentials.sign('', signingOptions));
+    return (await this.delete(tag, await Credentials.sign('', signingOptions))) ||
+      this.fail('remove', tag, options.member || options.tags[0]);;
   }
   async retrieve(tag) {
     await this.synchronize1(tag);
@@ -115,22 +120,26 @@ class Collection {
   async get(tag) { // Get the local raw signature data.
     return Persist.get(this.name, tag);
   }
-  async validate(tag, signature) {
-    let verified = await Credentials.verify(signature);
-    if (verified) return verified;
-    throw new Error(`The signature is not valid.`);
-  }
-  async put(tag, signature, services = this.services) { // Put the raw signature locally and the specified services. Can be triggered by us or any service.
+  // These two can be triggered by client code or by any service.
+  async put(tag, signature, services = this.services) { // Put the raw signature locally and the specified services.
     const validation = await this.validate(tag, signature);
-    // TODO: emit update.
-    // TODO: put on all services
+    if (!validation) return undefined;
     return Persist.put(this.name, this.tag(tag, validation), signature);
   }
-  async delete(tag, signature, services = this.services) { // Remove the raw signature locally and on the specified services. Can be triggered by us or any service.
-    await this.validate(tag, signature);
-    // TODO: emit update.
-    // TODO: put on all services    
+  async delete(tag, signature, services = this.services) { // Remove the raw signature locally and on the specified services.
+    const validation = await this.validate(tag, signature);
+    if (!validation) return undefined;
     return Persist.delete(this.name, tag, signature); // Signature payload is empty.
+  }
+
+  async validate(tag, signature) {
+    let verified = await Credentials.verify(signature);
+    if (verified) {
+      // TODO: emit update
+      return verified;
+    }
+    console.warn(`Signature is not valid for ${tag}.`);
+    return undefined;
   }
 
   promise(key, thunk) { return thunk; } // TODO: how will we keep track of overlapping distinct syncs?
