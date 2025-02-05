@@ -5,17 +5,17 @@ export { Credentials };
 export const Persist = { // TODO: use indexeddb in browser, fs in NodeJS
   stores: {},
   lists: {},
-  async put(collectionName, tag, signature) {
+  async put(collectionName, tag, payload) {
     this.stores[collectionName] ||= {};
     this.lists[collectionName]  ||= new Set();
 
-    this.stores[collectionName][tag] = signature;
+    this.stores[collectionName][tag] = payload;
     this.lists[collectionName].add(tag);
     return tag;
   },
-  async delete(collectionName, tag, signature) {
+  async delete(collectionName, tag, payload) {
     // We cannot remove items because merging with an earlier write would restore the item!
-    this.put(collectionName, tag, signature);
+    this.put(collectionName, tag, payload);
     this.lists[collectionName].delete(tag);
     return tag;
   },
@@ -23,7 +23,7 @@ export const Persist = { // TODO: use indexeddb in browser, fs in NodeJS
     this.stores[collectionName] ||= {};
     return this.stores[collectionName][tag];
   },
-  async list(collectionName) {
+  async list(collectionName) { // Maybe we should maintain the list in the Collection instead of here?
     // We cannot just list the keys of the collection, because that includes empty payloads of items that have been deleted.
     this.lists[collectionName] ||= {};
     return Array.from(this.lists[collectionName].keys());
@@ -44,7 +44,7 @@ class Collection {
   _canonicalizeOptions({owner:team = Credentials.owner, author:member = Credentials.author,
 			tag,
 			encryption = Credentials.encryption} = {}) {
-    // TODO: support simpflied syntax, too, per README
+    // TODO: support simplified syntax, too, per README
     // TODO: should we specify subject: tag for both mutables? (gives hash)
     const options = (team && team !== member) ?
 	  {team, member, tag, encryption} :
@@ -69,7 +69,6 @@ class Collection {
     // TODO: Provide some mechanism to really destroy something, and use it in tests.
     // Maybe a 'temporary', 'unmergeable', or 'lifetime' option in store? (Persist would have to keep track of such like it does for List, and then remove would act?)
     const {encryption, tag, ...signingOptions} = this._canonicalizeOptions(options);
-    // TODO: emit update
     // No need to await synchronization
     // TODO: delete on all services.
     return (await this.delete(tag, await Credentials.sign('', signingOptions))) ||
@@ -117,16 +116,16 @@ class Collection {
   }
 
   // These three ignore synchronization state, which if neeed is the responsibility of the caller.
-  async get(tag) { // Get the local raw signature data.
+  get(tag) { // Get the local raw signature data.
     return Persist.get(this.name, tag);
   }
   // These two can be triggered by client code or by any service.
-  async put(tag, signature, services = this.services) { // Put the raw signature locally and the specified services.
+  async put(tag, signature) { // Put the raw signature locally and the specified services.
     const validation = await this.validate(tag, signature);
     if (!validation) return undefined;
     return Persist.put(this.name, this.tag(tag, validation), signature);
   }
-  async delete(tag, signature, services = this.services) { // Remove the raw signature locally and on the specified services.
+  async delete(tag, signature) { // Remove the raw signature locally and on the specified services.
     const validation = await this.validate(tag, signature);
     if (!validation) return undefined;
     return Persist.delete(this.name, tag, signature); // Signature payload is empty.
@@ -185,6 +184,37 @@ export class MutableCollection extends Collection {
   }
 }
 export class VersionedCollection extends MutableCollection {
+  constructor(...rest) {
+    super(...rest);
+    this.versionName = this.name + 'Versions';
+  }
+  async get(tagOrOptions) { // Get the local raw signature data.
+    const isTag = typeof(tagOrOptions) === 'string';
+    const tag = isTag ? tagOrOptions : tagOrOptions.tag;
+    const json = await Persist.get(this.name, tag);
+    if (!json) return undefined;
+    const timestamps = JSON.parse(json);
+    const time = (!isTag && tagOrOptions.time) || timestamps.latest;
+    const hash = timestamps[time];
+    return Persist.get(this.versionName, hash); // Will be empty if relevant timestamp doesn't exist (deleted).
+  }
+  async put(tag, signature) { // The signature goes to a hash version, and the tag gets updated with a new time=>hash.
+    const validation = await this.validate(tag, signature);
+    if (!validation) return undefined;
+    tag = this.tag(tag, validation);
+    const json = await Persist.get(this.name, tag);
+    const timestamps = json ? JSON.parse(json) : {};
+    const time = validation.protectedHeader.iat;
+    const hash = validation.protectedHeader.sub;
+    timestamps.latest = time;
+    timestamps[time] = hash;
+    await Persist.put(this.versionName, hash, signature);
+    Persist[validation.payload.length ? 'put' : 'delete'](this.name, tag, JSON.stringify(timestamps));
+    return tag;
+  }
+  async delete(tag, signature) { // Remove the raw signature locally and on the specified services.
+    return this.put(tag, signature);
+  }
 }
 
 
