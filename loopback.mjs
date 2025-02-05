@@ -4,18 +4,28 @@ export { Credentials };
 // todo: do not export
 export const Persist = { // TODO: use indexeddb in browser, fs in NodeJS
   stores: {},
+  lists: {},
   async put(collectionName, tag, signature) {
     this.stores[collectionName] ||= {};
+    this.lists[collectionName]  ||= new Set();
+
     this.stores[collectionName][tag] = signature;
+    this.lists[collectionName].add(tag);
     return tag;
+  },
+  async delete(collectionName, tag, signature) {
+    // We cannot remove items because merging with an earlier write would restore the item!
+    this.put(collectionName, tag, signature);
+    this.lists[collectionName].delete(tag);
   },
   async get(collectionName, tag) {
     this.stores[collectionName] ||= {};
     return this.stores[collectionName][tag];
   },
   async list(collectionName) {
-    this.stores[collectionName] ||= {};
-    return Object.keys(this.stores[collectionName]);
+    // We cannot just list the keys of the collection, because that includes empty payloads of items that have been deleted.
+    this.lists[collectionName] ||= {};
+    return Array.from(this.lists[collectionName].keys());
   }
 };
 
@@ -25,6 +35,11 @@ class Collection {
     this.synchronize(services);
   }
   services =[]; // To keep different services in sync, we cannot depend on order.
+  debug = false;
+  log(...rest) {
+    if (!this.debug) return;
+    console.log(this.name, ...rest);
+  }
   _canonicalizeOptions({owner:team = Credentials.owner, author:member = Credentials.author,
 			tag,
 			encryption = Credentials.encryption}) {
@@ -46,6 +61,8 @@ class Collection {
     return this.put(tag, signature);
   }
   async remove(options = {}) { // Note: Really just replacing with empty data forever. Otherwise merging with earlier data will bring it back!
+    // TODO: Provide some mechanism to really destroy something, and use it in tests.
+    // Maybe a 'temporary', 'unmergeable', or 'lifetime' option in store? (Persist would have to keep track of such like it does for List, and then remove would act?)
     const {encryption, tag, ...signingOptions} = this._canonicalizeOptions(options);
     // TODO: emit update
     // No need to await synchronization
@@ -56,7 +73,6 @@ class Collection {
     await this.synchronize1(tag);
     const signature = await this.get(tag);
     const verified = await Credentials.verify(signature);
-    console.log(verified);
     // TODO decrypt
     return verified;
   }
@@ -98,17 +114,21 @@ class Collection {
   async get(tag) { // Get the local raw signature data.
     return Persist.get(this.name, tag);
   }
-  put(tag, signature, services = this.services) { // Put the raw signature locally and the specified services. Can be triggered by us or any service.
-    // TODO: verify.
+  async validate(tag, signature) {
+    let verified = await Credentials.verify(signature);
+    if (!verified) throw new Error(`The signature is not valid.`);    
+  }
+  async put(tag, signature, services = this.services) { // Put the raw signature locally and the specified services. Can be triggered by us or any service.
+    await this.validate(tag, signature);
     // TODO: emit update.
     // TODO: put on all services
     return Persist.put(this.name, tag, signature);
   }
-  delete(tag, signature, services = this.services) { // Remove the raw signature locally and on the specified services. Can be triggered by us or any service.
-    // TODO: verify
+  async delete(tag, signature, services = this.services) { // Remove the raw signature locally and on the specified services. Can be triggered by us or any service.
+    await this.validate(tag, signature);
     // TODO: emit update.
     // TODO: put on all services    
-    return Persist.put(this.name, tag, signature); // Signature payload is empty.
+    return Persist.delete(this.name, tag, signature); // Signature payload is empty.
   }
 
   promise(key, thunk) { return thunk; } // TODO: how will we keep track of overlapping distinct syncs?

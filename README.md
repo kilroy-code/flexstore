@@ -96,7 +96,7 @@ userData.team = teamAlice;
 await users.store(someTag,  userData);
 ```
 
-By the way, a user can be on any number of teams, and teams can have other teams as members. In a distributed system (and arguably in all systems), this way of specifying ownership is more flexible than trying to maintain a set of "write permissions" via an access control list. The owner can be specified individually on each `store()` -- specifying a current `Credentials.owner` is just a convenience. 
+By the way, a user can be on any number of owner teams, and teams can have other teams as members. In a distributed system (and arguably in all systems), this way of specifying ownership is more flexible than trying to maintain a set of "write permissions" via an access control list. The owner can be specified individually on each `store()` -- specifying a current `Credentials.owner` is just a convenience. 
 
 
 We can also arrange for only the members of a team to be able to _read_ the data. This is done by encrypting the data on the client before it is signed, and decrypting it on the client after it is verfied. This can be done manually, automatically by `store()`, or by specifying a current `Credentials.encryption = true` (encrypt for owner team if specified, otherwise only the author), or `Credentials.encryption = somOtherTeamTag`.
@@ -114,7 +114,7 @@ The synchronization algorithm can be specified individually for each Collection 
 
 ### ImmutableCollection
 
-The tag for these are automatically produced as the hash of their contents. (`anImmutableCollection.store(tag, data) ignores the tag and can be ommitted) So if you change anything at all, it's a different object with a different tag. If store() is called on something that already exists, it will not be overridden, and the original author's signature is preserved. I.e., the first author "wins", and that is the signature and timestamp that is preserved. The hashing is done _after_ any encryption, so the same payload encrypted for different teams creates different tags.
+The tag for these are automatically produced as the hash of their contents. (`anImmutableCollection.store(tag, data)` ignores the tag and can be ommitted) So if you change anything at all, it's a different object with a different tag. If store() is called on something that already exists, it will not be overridden, and the original author's signature is preserved. I.e., the first author "wins", and that is the signature and timestamp that is preserved. The hashing is done _after_ any encryption, so the same payload encrypted for different teams creates different tags. However, a later `remove()` _does_ get respected (as long as the new signature is from the correct `owner`).
 
 When synchronizing, the two storage services exchange a list of the [tag, timestamp] pairs that they have in their copy of the collection. Each side then retrieves each of the tags that it does not have at all, or which is _not newer_ than the one they have. In the second case, we have the same payload data, but we get the other side's signature anyway so that the author and timestamp are the same on both systems. This can occur when two unconnected devices both save the same exact data locally. 
 
@@ -130,6 +130,8 @@ When synchronizing, the two services exchange a list of their [tag, timestamp] p
 ### VersionedCollection
 
 This is a distinct kind of MutableCollection in which all versions are available. `retrieve()` accepts an additional timestamp argument, and will produce the result that was active at that timestamp. Otherwise, it answers the latest value, as for MutableCollection. Additionally, `aVersionedCollection.retrieveTimestamps(tag)` promises a list of all the timestamps.
+
+A common use of `VersionedCollection` is to keep track of each item in a series of messages, transactions, etc. Think of each timestamp pointing to a separate ImmutableCollection tag that has the latest change. Work can be done offline or on a separated LAN, and then merged later to interleave the messages.
 
 When synchronizing, each side sends over a list of [tag, listOfPayloadHashes]. Any missing items are retrieved and added to the object. (Note that `aVersionedCollection.retrieve(tag, optionalTimestamp)` produces a single signature with a particular timestamp -- there is no collected-works signature that we need to worry about forging. In the extremely unlikely event of a duplicate timestamp with different hashes, the deterministic preference algorithm is used to define the order in which _both_ items are included, using a floating point timestamp.
 
@@ -155,5 +157,5 @@ VersionedCollection
 aCollection.store()
 aCollection.retrieve()
 aCollection.remove()
-aCollection.list()
+aCollection.list() - order is not specifed
 aCollection.find()
