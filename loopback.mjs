@@ -17,6 +17,7 @@ export const Persist = { // TODO: use indexeddb in browser, fs in NodeJS
     // We cannot remove items because merging with an earlier write would restore the item!
     this.put(collectionName, tag, signature);
     this.lists[collectionName].delete(tag);
+    return tag;
   },
   async get(collectionName, tag) {
     this.stores[collectionName] ||= {};
@@ -42,9 +43,9 @@ class Collection {
   }
   _canonicalizeOptions({owner:team = Credentials.owner, author:member = Credentials.author,
 			tag,
-			encryption = Credentials.encryption}) {
+			encryption = Credentials.encryption} = {}) {
     // TODO: support simpflied syntax, too, per README
-    // TODO: should we specify subject: tag for both mutables?
+    // TODO: should we specify subject: tag for both mutables? (gives hash)
     const options = (team && team !== member) ?
 	  {team, member, tag, encryption} :
 	  {tags: [member], tag, time: Date.now(), encryption}; // No iat if time not explicitly given.
@@ -116,13 +117,14 @@ class Collection {
   }
   async validate(tag, signature) {
     let verified = await Credentials.verify(signature);
-    if (!verified) throw new Error(`The signature is not valid.`);    
+    if (verified) return verified;
+    throw new Error(`The signature is not valid.`);
   }
   async put(tag, signature, services = this.services) { // Put the raw signature locally and the specified services. Can be triggered by us or any service.
-    await this.validate(tag, signature);
+    const validation = await this.validate(tag, signature);
     // TODO: emit update.
     // TODO: put on all services
-    return Persist.put(this.name, tag, signature);
+    return Persist.put(this.name, this.tag(tag, validation), signature);
   }
   async delete(tag, signature, services = this.services) { // Remove the raw signature locally and on the specified services. Can be triggered by us or any service.
     await this.validate(tag, signature);
@@ -162,10 +164,16 @@ class Collection {
     }
   }
 }
-// TODO: different rules for synchronizeTags, synchronize1
+// TODO: different rules for hash tag, synchronizeTags, synchronize1
 export class ImmutableCollection extends Collection {
+  tag(tag, validation) { // Ignores tag. Just the hash.
+    return validation.protectedHeader.sub;
+  }
 }
 export class MutableCollection extends Collection {
+  tag(tag, validation) { // Use tag if specified, but defaults to hash.
+    return tag || validation.protectedHeader.sub;
+  }
 }
 export class VersionedCollection extends MutableCollection {
 }

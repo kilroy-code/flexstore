@@ -1,16 +1,11 @@
-import { Persist, Credentials, MutableCollection } from '../loopback.mjs';
+import { Persist, Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../loopback.mjs';
 const { describe, beforeAll, afterAll, it, expect, expectAsync } = globalThis;
 
 describe('Flexstore', function () {
-  let users;
+  let user, otherUser, team;
+  const services = ['/', 'https://ki1r0y.com/flex/'];
   beforeAll(async function () {
-    const services = ['/', 'https://ki1r0y.com/flex/'];
-    // Start synchronizing the users collection with each of the listed services that are reachable.
-    // Other Collection subclasses are ImmutableCollection and VersionedCollection.
-    users = new MutableCollection({name: 'com.acme.users', services});
-    // There are some internal collections for credentials. Synchronize those, too.
     Credentials.synchronize(services);
-
     Credentials.prompt = function (tag, promptString) { // Used when first creating a user credential, or when adding an existing credential to a new device.
       function swizzle(seed) { return seed + 'appSalt'; } // Could also look up in an app-specific customer database.
       if (prompt) return swizzle(promptString); // fixme prompt(promptString)); 
@@ -18,79 +13,95 @@ describe('Flexstore', function () {
     };
 
     // Make a user.
-    Credentials.author = await Credentials.createAuthor('test pin:');
-  }, 10e3);
+    user = Credentials.author = await Credentials.createAuthor('test pin:');
+    otherUser = await Credentials.createAuthor('airspeed?');
+    team = await Credentials.create(Credentials.author, otherUser);
+  }, 15e3);
   afterAll(async function () {
-    await Credentials.destroy({tag: Credentials.author, recursiveMembers: true});
+    await Credentials.destroy({tag: otherUser, recursiveMembers: true});
+    await Credentials.destroy(team);
+    await Credentials.destroy({tag: user, recursiveMembers: true});
   });
-  describe('smokes', function () {
-    let user, someTag, data = {name: 'Alice', birthday: '01/01'};
-    beforeAll(async function () {
-      someTag = Credentials.author;
-      user = await users.store(data, {tag: someTag});
-    });
-    afterAll(async function () {
-      const fixme = await users.retrieve(someTag);
-      await users.remove({tag: someTag});
-      const signature = await users.retrieve(someTag);
-      expect(signature.json).toBeUndefined();
-    });
-    it('stores.', function () {
-      expect(user).toBe(someTag);
-    });
-    it('retrieves.', async function () {
-      const signature = await users.retrieve(someTag);
-      expect(signature.json).toEqual(data);
-    });
-    it('lists.', async function () {
-      expect(await users.list()).toEqual([someTag]);
-    });
-    it('finds', async function () {
-      expect(await users.find({name: 'Alice'})).toBe(someTag);
-    });
-    describe('specifying owner', function () {
-      let otherUser, team, previousOwner;
-      const data = {name: 'Bob', birthday: '02/02'};
+  function testCollection(collection, restoreCheck) {
+    const label = collection.constructor.name;
+    describe(label, function () {
+      let tag, data = {name: 'Alice', birthday: '01/01'};
       beforeAll(async function () {
-	otherUser = await Credentials.createAuthor('airspeed?');
-	previousOwner = Credentials.owner;
-	team = Credentials.owner = await Credentials.create(Credentials.author, otherUser);	
-	expect(await users.store(data, {tag: otherUser})).toBe(otherUser);
-      }, 10e3);
+	tag = await collection.store(data);
+      });
       afterAll(async function () {
-	const maxList = await users.list();
-	expect(maxList.length).toBe(2);
-	await users.remove({tag: otherUser});
-	const afterList = await users.list();
-	expect((await users.retrieve(otherUser)).json).toBeUndefined();
-	expect(afterList.length).toBe(1);
-	await Credentials.destroy({tag: otherUser, recursiveMembers: true});
-	await Credentials.destroy(team);
-	Credentials.owner = previousOwner;
+	await collection.remove({tag});
+	const signature = await collection.retrieve(tag);
+	expect(signature.json).toBeUndefined();
       });
-      it('team members can re-store', async function () {
-	data.birthday = '03/03';
-	const originalAuthor = Credentials.author;
-	Credentials.author = otherUser;
-	expect(await users.store(data, {tag: otherUser}));
-	Credentials.author = originalAuthor;
-	const newSignature = await users.retrieve(otherUser);
-	expect(newSignature.json).toEqual(data);
-	expect(newSignature.protectedHeader.act).toBe(otherUser);
-	expect(newSignature.protectedHeader.iss).toBe(team);	
+      it('stores.', function () {
+	expect(typeof tag).toBe('string');
       });
-      it('cannot be written by non-team member.', async function () {
-	let random = await Credentials.createAuthor("who knows?");
-	await expectAsync(users.store({whatever: 'ignored'}, {tag: otherUser, author: random})).toBeRejected();
-	await Credentials.destroy({tag: random, recursiveMembers: true});
-      }, 10e3);
-      it('adds to list.', async function () {
-	const list = await users.list();
-	const tags = [Credentials.author, otherUser];
-	list.sort();
-	tags.sort();
-	expect(list).toEqual(tags);
+      it('retrieves.', async function () {
+	const signature = await collection.retrieve(tag);
+	expect(signature.json).toEqual(data);
+      });
+      it('lists.', async function () {
+	expect(await collection.list()).toEqual([tag]);
+      });
+      it('finds', async function () {
+	expect(await collection.find({name: 'Alice'})).toBe(tag);
+      });
+      describe('specifying owner', function () {
+	let previousOwner, tag2, tag3;
+	const data = {name: 'Bob', birthday: '02/02'};
+	beforeAll(async function () {
+	  previousOwner = Credentials.owner;
+	  Credentials.owner = team;
+	  tag2 = await collection.store(data);
+	}, 10e3);
+	afterAll(async function () {
+	  await collection.remove({tag: tag2});
+	  await collection.remove({tag: tag3});	 // May be a no-op.
+	  const afterList = await collection.list();
+	  expect((await collection.retrieve(tag2)).json).toBeUndefined();
+	  expect((await collection.retrieve(tag3)).json).toBeUndefined();	  
+	  expect(afterList.length).toBe(1);
+	  Credentials.owner = previousOwner;
+	});
+	it('team members can re-store', async function () {
+	  const newData = Object.assign({}, data, {birthday: '03/03'});
+	  Credentials.author = otherUser;
+	  tag3 = await collection.store(newData, {tag: tag2});
+	  Credentials.author = user;
+	  const newSignature = await collection.retrieve(tag2);
+	  expect(newSignature.protectedHeader.iss).toBe(team);	
+	  await restoreCheck(data, newData, newSignature, tag2, tag3);
+	});
+	it('cannot be written by non-team member.', async function () {
+	  let random = await Credentials.createAuthor("who knows?");
+	  await expectAsync(collection.store({whatever: 'ignored'}, {tag: tag2, author: random})).toBeRejected();
+	  await Credentials.destroy({tag: random, recursiveMembers: true});
+	}, 10e3);
+	it('adds to list.', async function () {
+	  const list = await collection.list();
+	  expect(list).toContain(tag);
+	  expect(list).toContain(tag2);
+	});
       });
     });
-  });
+  }
+  testCollection(new ImmutableCollection({name: 'com.acme.immutable', services}),
+		 (firstData, newData, signature, firstTag, newTag) => {
+		   expect(firstTag).not.toBe(newTag);
+		   expect(signature.json).toEqual(firstData);
+		   expect(signature.protectedHeader.act).toBe(user);		   
+		 });
+  testCollection(new MutableCollection({name: 'com.acme.mutable', services}),
+		 (firstData, newData, signature, firstTag, newTag) => {
+		   expect(firstTag).toBe(newTag);
+		   expect(signature.json).toEqual(newData);
+		   expect(signature.protectedHeader.act).toBe(otherUser);
+		 });
+  testCollection(new VersionedCollection({name: 'com.acme.versioned', services}),
+		 (firstData, newData, signature, firstTag, newTag) => {
+		   expect(firstTag).toBe(newTag);
+		   expect(signature.json).toEqual(newData);
+		   expect(signature.protectedHeader.act).toBe(otherUser);		   
+		 });
 });
