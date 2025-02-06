@@ -77,6 +77,7 @@ class Collection {
   async retrieve(tag) {
     await this.synchronize1(tag);
     const signature = await this.get(tag);
+    if (!signature) return signature;
     const verified = await Credentials.verify(signature);
     // TODO decrypt
     return verified;
@@ -188,6 +189,12 @@ export class VersionedCollection extends MutableCollection {
     super(...rest);
     this.versionName = this.name + 'Versions';
   }
+  async retrieveTimestamps(tag) {
+    const json = await Persist.get(this.name, tag);
+    if (!json) return undefined;
+    const timestamps = JSON.parse(json);
+    return Object.keys(timestamps).slice(1);
+  }
   async get(tagOrOptions) { // Get the local raw signature data.
     const isTag = typeof(tagOrOptions) === 'string';
     const tag = isTag ? tagOrOptions : tagOrOptions.tag;
@@ -195,7 +202,15 @@ export class VersionedCollection extends MutableCollection {
     if (!json) return undefined;
     const timestamps = JSON.parse(json);
     const time = (!isTag && tagOrOptions.time) || timestamps.latest;
-    const hash = timestamps[time];
+    let hash = timestamps[time];
+    if (!hash) { // We need to find the timestamp that was in force at the requested time.
+      let best = 0, times = Object.keys(timestamps);
+      for (let i = 1; i < times.length; i++) { // 0th is the key 'latest'.
+	if (times[i] <= time) best = times[i];
+	else break;
+      }
+      hash = timestamps[best];
+    }
     return Persist.get(this.versionName, hash); // Will be empty if relevant timestamp doesn't exist (deleted).
   }
   async put(tag, signature) { // The signature goes to a hash version, and the tag gets updated with a new time=>hash.

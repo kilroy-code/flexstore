@@ -34,6 +34,7 @@ describe('Flexstore', function () {
 	const signature = await collection.retrieve(tag);
 	expect(signature.json).toBeUndefined();
       });
+      //beforeEach(function () { collection.debug = false; });
       it('stores.', function () {
 	expect(typeof tag).toBe('string');
       });
@@ -71,7 +72,7 @@ describe('Flexstore', function () {
 	  Credentials.author = user;
 	  const newSignature = await collection.retrieve(tag2);
 	  expect(newSignature.protectedHeader.iss).toBe(team);	
-	  await restoreCheck(data, newData, newSignature, tag2, tag3);
+	  await restoreCheck(data, newData, newSignature, tag2, tag3, collection);
 	});
 	it('cannot be written by non-team member.', async function () {
 	  let random = await Credentials.createAuthor("who knows?");
@@ -87,10 +88,14 @@ describe('Flexstore', function () {
     });
   }
   testCollection(new ImmutableCollection({name: 'com.acme.immutable', services}),
-		 (firstData, newData, signature, firstTag, newTag) => {
+		 async (firstData, newData, signature, firstTag, newTag, collection) => {
 		   expect(firstTag).not.toBe(newTag);
 		   expect(signature.json).toEqual(firstData);
-		   expect(signature.protectedHeader.act).toBe(user);		   
+		   expect(signature.protectedHeader.act).toBe(user);
+		   // newData was not dropped altogether. It was saved in newTag
+		   const anotherSig = await collection.retrieve(newTag);
+		   expect(anotherSig.json).toEqual(newData);
+		   expect(anotherSig.protectedHeader.act).toBe(otherUser);
 		 });
   testCollection(new MutableCollection({name: 'com.acme.mutable', services}),
 		 (firstData, newData, signature, firstTag, newTag) => {
@@ -99,9 +104,23 @@ describe('Flexstore', function () {
 		   expect(signature.protectedHeader.act).toBe(otherUser);
 		 });
   testCollection(new VersionedCollection({name: 'com.acme.versioned', services}),
-		 (firstData, newData, signature, firstTag, newTag) => {
+		 async (firstData, newData, signature, firstTag, newTag, collection) => {
 		   expect(firstTag).toBe(newTag);
 		   expect(signature.json).toEqual(newData);
-		   expect(signature.protectedHeader.act).toBe(otherUser);		   
+		   expect(signature.protectedHeader.act).toBe(otherUser);
+
+		   const timestamps = await collection.retrieveTimestamps(firstTag);
+		   expect(timestamps.length).toBe(2); // 'latest' plus two times
+
+		   // Can specify a specific time, and get the version that was in force then.
+		   
+		   // A specific matching time. In this case, the earliest time.
+		   expect((await collection.retrieve({tag: firstTag, time: timestamps[0]}))?.json).toEqual(firstData);
+		   // A time before the first, and get nothing.
+		   expect((await collection.retrieve({tag: firstTag, time: timestamps[0] - 1}))?.json).toBeUndefined();
+		   // A time in between entries, and get the largest one that is before what is specifed.
+		   expect((await collection.retrieve({tag: firstTag, time: timestamps[0] + 1}))?.json).toEqual(firstData);		   
+		   // A time after the last and get the same as the last.
+		   expect((await collection.retrieve({tag: firstTag, time: timestamps[1] + 1}))?.json).toEqual(newData);
 		 });
 });
