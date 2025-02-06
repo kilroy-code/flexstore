@@ -5,29 +5,19 @@ const { CustomEvent } = globalThis;
 // todo: do not export
 export const Persist = { // TODO: use indexeddb in browser, fs in NodeJS
   stores: {},
-  lists: {},
   async put(collectionName, tag, payload) {
     this.stores[collectionName] ||= {};
-    this.lists[collectionName]  ||= new Set();
-
     this.stores[collectionName][tag] = payload;
-    this.lists[collectionName].add(tag);
     return tag;
   },
   async delete(collectionName, tag, payload) {
     // We cannot remove items because merging with an earlier write would restore the item!
     this.put(collectionName, tag, payload);
-    this.lists[collectionName].delete(tag);
     return tag;
   },
   async get(collectionName, tag) {
     this.stores[collectionName] ||= {};
     return this.stores[collectionName][tag];
-  },
-  async list(collectionName) { // Maybe we should maintain the list in the Collection instead of here?
-    // We cannot just list the keys of the collection, because that includes empty payloads of items that have been deleted.
-    this.lists[collectionName] ||= {};
-    return Array.from(this.lists[collectionName].keys());
   }
 };
 
@@ -38,6 +28,16 @@ class Collection extends EventTarget {
     this.synchronize(services);
   }
   services =[]; // To keep different services in sync, we cannot depend on order.
+
+  // TODO: persist this.
+  tags = new Set(); // Keeps track of our (undeleted) keys. Deleted keys are still present for sync'ing, so a db listing won't do.
+  async addTag(tag) {
+    this.tags.add(tag);
+  }
+  async deleteTag(tag) {
+    this.tags.delete(tag);
+  }
+  
   debug = false;
   log(...rest) {
     if (!this.debug) return;
@@ -93,9 +93,11 @@ class Collection extends EventTarget {
     }
     return verified;
   }
-  async list() { // List all tags of this collection.
-    await this.synchronizeTags();
-    return Persist.list(this.name);
+  async list(skipSync = false ) { // List all tags of this collection.
+    if (!skipSync) await this.synchronizeTags();
+    // We cannot just list the keys of the collection, because that includes empty payloads of items that have been deleted.
+    this.log('tags', this.tags);
+    return Array.from(this.tags.keys());
   }
   async match(tag, properties) { // Is this signature what we are looking for?
     const signature = await this.get(tag);
@@ -108,7 +110,7 @@ class Collection extends EventTarget {
     return true;
   }
   async findLocal(properties) { // Find the tag in our store that matches, else falsey
-    for (const tag of await Persist.list(this.name)) { // Direct Persist.list, w/o sync.
+    for (const tag of await this.list('no-sync')) { // Direct list, w/o sync.
       if (await this.match(tag, properties)) return tag;
     }
     return false;
@@ -137,11 +139,13 @@ class Collection extends EventTarget {
   async put(tag, signature) { // Put the raw signature locally and the specified services.
     const validation = await this.validate(tag, signature);
     if (!validation) return undefined;
+    await this.addTag(validation.tag);
     return Persist.put(this.name, validation.tag, signature);
   }
   async delete(tag, signature) { // Remove the raw signature locally and on the specified services.
     const validation = await this.validate(tag, signature, 'requireTag');
     if (!validation) return undefined;
+    await this.deleteTag(tag);
     return Persist.delete(this.name, validation.tag, signature); // Signature payload is empty.
   }
 
@@ -270,11 +274,14 @@ export class VersionedCollection extends MutableCollection {
     timestamps.latest = time;
     timestamps[time] = hash;
     await Persist.put(this.versionName, hash, signature);
-    Persist[validation.payload.length ? 'put' : 'delete'](this.name, tag, JSON.stringify(timestamps));
+    await Persist[validation.payload.length ? 'put' : 'delete'](this.name, tag, JSON.stringify(timestamps));
+    await this.addTag(tag);
     return tag;
   }
   async delete(tag, signature) { // Remove the raw signature locally and on the specified services.
-    return this.put(tag, signature);
+    tag = await this.put(tag, signature); // will add tag.
+    await this.deleteTag(tag);
+    return tag;
   }
 }
 
