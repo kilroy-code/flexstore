@@ -6,13 +6,13 @@ describe('Flexstore', function () {
   const services = ['/', 'https://ki1r0y.com/flex/'];
   beforeAll(async function () {
     Credentials.synchronize(services);
-    // FIXME:getUserDeviceSecret => prompt
+    // TODO:getUserDeviceSecret => prompt
     Credentials.getUserDeviceSecret  = function (tag, promptString) { // Used when first creating a user credential, or when adding an existing credential to a new device.
       function swizzle(seed) { return seed + 'appSalt'; } // Could also look up in an app-specific customer database.
-      if (prompt) return swizzle(promptString); // fixme prompt(promptString)); 
+      if (promptString) return swizzle(promptString); // fixme prompt(promptString)); 
       return swizzle(tag);
     };
-    window.Security = Credentials;
+    //window.Security = Credentials;
 
     // Make a user.
     user = Credentials.author = await Credentials.createAuthor('test pin:');
@@ -29,11 +29,23 @@ describe('Flexstore', function () {
     const label = collection.constructor.name;
     describe(label, function () {
       let tag, data = {name: 'Alice', birthday: '01/01'};
+      let updateCount = 0, latestUpdate;
       beforeAll(async function () {
+	collection.addEventListener('update', event => {
+	  updateCount++;
+	  latestUpdate = event.detail;
+	});
 	tag = await collection.store(data);
+	expect(updateCount).toBe(1);
+	expect(latestUpdate.tag).toBe(tag);
+	expect(latestUpdate.json).toEqual(data);
       });
       afterAll(async function () {
+	updateCount = 0;
 	await collection.remove({tag});
+	expect(updateCount).toBe(1);
+	expect(latestUpdate.tag).toBe(tag);
+	expect(latestUpdate.json).toBeFalsy();
 	const signature = await collection.retrieve(tag);
 	expect(signature.json).toBeUndefined();
       });
@@ -55,6 +67,7 @@ describe('Flexstore', function () {
 	let previousOwner, tag2, tag3;
 	const data = {name: 'Bob', birthday: '02/02'};
 	beforeAll(async function () {
+	  updateCount = 0;
 	  previousOwner = Credentials.owner;
 	  Credentials.owner = team;
 	  tag2 = await collection.store(data);
@@ -67,6 +80,7 @@ describe('Flexstore', function () {
 	  expect((await collection.retrieve(tag3)).json).toBeUndefined();	  
 	  expect(afterList.length).toBe(1);
 	  Credentials.owner = previousOwner;
+	  expect(updateCount).toBe(4); // 2 successfull stores and 2 removes.
 	});
 	it('team members can re-store', async function () {
 	  const newData = Object.assign({}, data, {birthday: '03/03'});

@@ -1,5 +1,6 @@
 import Credentials from "@ki1r0y/distributed-security";
 export { Credentials };
+const { CustomEvent } = globalThis;
 
 // todo: do not export
 export const Persist = { // TODO: use indexeddb in browser, fs in NodeJS
@@ -30,8 +31,9 @@ export const Persist = { // TODO: use indexeddb in browser, fs in NodeJS
   }
 };
 
-class Collection {
+class Collection extends EventTarget {
   constructor({name, services = []}) {
+    super();
     Object.assign(this, {name});
     this.synchronize(services);
   }
@@ -124,18 +126,20 @@ class Collection {
   async put(tag, signature) { // Put the raw signature locally and the specified services.
     const validation = await this.validate(tag, signature);
     if (!validation) return undefined;
-    return Persist.put(this.name, this.tag(tag, validation), signature);
+    return Persist.put(this.name, validation.tag, signature);
   }
   async delete(tag, signature) { // Remove the raw signature locally and on the specified services.
-    const validation = await this.validate(tag, signature);
+    const validation = await this.validate(tag, signature, 'requireTag');
     if (!validation) return undefined;
-    return Persist.delete(this.name, tag, signature); // Signature payload is empty.
+    return Persist.delete(this.name, validation.tag, signature); // Signature payload is empty.
   }
 
-  async validate(tag, signature) {
+  async validate(tag, signature, requireTag = false) {
     let verified = await Credentials.verify(signature);
+    verified.tag = requireTag ? tag : this.tag(tag, verified);
     if (verified) {
       // TODO: emit update
+      this.dispatchEvent(new CustomEvent('update', {detail: verified}));
       return verified;
     }
     console.warn(`Signature is not valid for ${tag}.`);
