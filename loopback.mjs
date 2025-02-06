@@ -57,10 +57,13 @@ class Collection extends EventTarget {
   fail(operation, data, author) {
     throw new Error(`${author} does not have the authority to ${operation} ${JSON.stringify(data)}.`);
   }
+  encryptedMimeType = 'text/encrypted';
   async store(data, options = {}) {
     const {encryption, tag, ...signingOptions} = this._canonicalizeOptions(options);
-    // TODO: encrypt
-    // TODO: default tag to hash AFTER any encryption. (It is in protectedHeader.sub by default.)
+    if (encryption) {
+      data = await Credentials.encrypt(data, encryption);
+      signingOptions.contentType = this.encryptedMimeType;
+    }
     // No need to await synchronization.
     // TODO: put on all services
     const signature = await Credentials.sign(data, signingOptions);
@@ -81,7 +84,13 @@ class Collection extends EventTarget {
     const signature = await this.get(tag);
     if (!signature) return signature;
     const verified = await Credentials.verify(signature);
-    // TODO decrypt
+    if (verified.protectedHeader.cty === this.encryptedMimeType) {
+      const decrypted = await Credentials.decrypt(verified.text);
+      verified.json = decrypted.json;
+      verified.text = decrypted.text;
+      verified.payload = decrypted.payload;
+      verified.decrypted = decrypted;
+    }
     return verified;
   }
   async list() { // List all tags of this collection.
@@ -138,7 +147,6 @@ class Collection extends EventTarget {
     let verified = await Credentials.verify(signature);
     verified.tag = requireTag ? tag : this.tag(tag, verified);
     if (verified) {
-      // TODO: emit update
       this.dispatchEvent(new CustomEvent('update', {detail: verified}));
       return verified;
     }

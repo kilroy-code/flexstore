@@ -70,6 +70,7 @@ describe('Flexstore', function () {
 	  updateCount = 0;
 	  previousOwner = Credentials.owner;
 	  Credentials.owner = team;
+	  Credentials.encryption = 'team';
 	  tag2 = await collection.store(data);
 	}, 10e3);
 	afterAll(async function () {
@@ -88,7 +89,8 @@ describe('Flexstore', function () {
 	  tag3 = await collection.store(newData, {tag: tag2});
 	  Credentials.author = user;
 	  const newSignature = await collection.retrieve(tag2);
-	  expect(newSignature.protectedHeader.iss).toBe(team);	
+	  expect(newSignature.protectedHeader.iss).toBe(team);
+	  expect(newSignature.decrypted.protectedHeader.kid).toBe(team); // encrypted for the whole team.
 	  await restoreCheck(data, newData, newSignature, tag2, tag3, collection);
 	});
 	it('cannot be written by non-team member.', async function () {
