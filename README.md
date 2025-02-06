@@ -32,7 +32,7 @@ import { Credentials, MutableCollection } from '@ki1r0y/flexstore';
 const services = ['/', 'https://ki1r0y.com/flex/'];
 // Start synchronizing the users collection with each of the listed services that are reachable.
 // Other Collection subclasses are ImmutableCollection and VersionedCollection.
-const users = new MutableCollection({name: 'com.acme.users', services});
+const users = new MutableCollection({name: 'users.acme.com, services});
 // There are some in
 ternal collections for credentials. Synchronize those, too.
 Credentials.synchronize(services);
@@ -101,6 +101,14 @@ By the way, a user can be on any number of owner teams, and teams can have other
 
 We can also arrange for only the members of a team to be able to _read_ the data. This is done by encrypting the data on the client before it is signed, and decrypting it on the client after it is verfied. This can be done manually, automatically by `store()`, or by specifying a current `Credentials.encryption = true` (encrypt for owner team if specified, otherwise only the author), or `Credentials.encryption = somOtherTeamTag`.
 
+## Pseudonymity
+
+`author` and `owner` tags are stable strings that may or may not correspond to distinct individuals or groups. This protocol does not provide any central collection of users, but applications may do so for their users, and such applications might or might not include attestations as to human identities signed by some authority. An individual human or group of people may create different tags for different applications, multiple tags within an application, or may re-use a tag at their (and the application's) discretion.
+
+An application can allow (or require) a user to encrypt data within a collection (e.g., all items, particular property values, etc.). Additionaly, an application may synchronize only with its own service, or may choose to relay data with other services, and this includes the [`Team`](#key-management) collection. However, the membership tags of an `owner` group are readable by anyone who has access to the collection. 
+
+(TBD: As it stands now, this is how the underlying private key access works. (Reliable and well-tested.) When a user needs the private signing or decrypting key for a given tag, distributed-security gets the list of member tags, and will use the first successful member key to unlock, recursively following membership to a local or recovery key (2) or (3) in key management, below. So they have to be public. It might be possible to maintain some sort of personal collection of team tags to use instead, so that the member tags can instead be listed as one-way hashes to prove membership IFF you know what key you are testing.)
+
 
 ## Synchronization
 
@@ -137,25 +145,103 @@ When synchronizing, each side sends over a list of [tag, listOfPayloadHashes]. A
 
 ## API
 
+### Exchange Format
+
+Items are created in the client by optionally encrypting as [JWE](https://www.rfc-editor.org/rfc/rfc7516), and then signing the result as [JWS](https://datatracker.ietf.org/doc/html/rfc7515). This format includes an identification of the algorithm -- unless specified otherwise, our implementation uses the ES384 algorithm for signing, and RSA-OAEP-256 with a 4096 modulus length for encryption. The JWS is what is exchanged among services, and it the result is verified and decrypted at the client.
+
+The synchronization process exchanges the following messages: TBD
+
+### Accepting Changes to an Item
+
+Regardless of whether a JWS comes from the client or another service, an implementation should do the following before persisting the JWS:
+
+... clean up deep verification explanation from [distributed-security](https://github.com/kilroy-code/distributed-security/blob/main/docs/advanced.md#signatures-with-multiple-tags-and-other-signature-options)...
+
+### Key Management
+
+Private keys are themselves encrypted, signed, and stored within the `Team` collection of the system itself, using the same exchange and acceptance criteria as above. For each `author` or `owner` tag, the private decryption and signing keys are represented in a JWK that is encrypted so that it can only be decrypted by an enumerated list of recipients. These recipents are themselves tags representing other keypairs stored in one of three ways:
+
+1. Yet another `author` or `owner` tag item in the `Team` collection. In this way, arbitrary hierarchies of teams are supported.
+2. The tag for a local keypair that is encrypted and only stored locally on the user's device. (In browsers, we use indexedDB in a separate worker context that is not accessible from the application.) An application creates one of these for each browser in which the user runs the application, using either `Credentials.createAuthor()` or `Credentials.authorizeAuthor()`.
+3. The tag for a recovery keypair, encrypted using a secret supplied by the user, and stored in the `KeyRecovery` collection. This is only to be used when adding the author to a new machine that does not yet have a local tag (2). For example, an application might ask the user for the answer to a combination of security questions (mother's maiden name, etc.) and canonicalize the answers to form a user-specific memorable text. 
+
+For (2) and (3), the application is responsible for getting a secret from the user, using `Credentials.getUserDeviceSecret()`. _TBD better name_ (We then use this to encrypt the JWK using PBES2-HS512+A256KW.) Each application should produce it's own application-specific and user-specific results, but may safely share `author` and `team` tags (1) between applications if desired. In this way, an application may support multiple "login" users on the same browser. 
+
+In addition, the tags are url-safe base64 encodings of the public verification key that matches the private signing key described above. Thus any application can verify signatures using only the JWS signature itself (which always specifies the tag). The public encryption key is stored unencrypted as as signed JWS as the tag item in the `EncryptionKey` collection, so that anyone can encrypt for only the specified `author` or `owner` to read.
+
+### Service Names
+
+TBD, but one of two things:
+
+1. A hosted relay, specified via a URL for the specific collection. Must provide:
+   - GET method for an endpoint formed by the url/:tag.jws.
+   - Either 
+     - PUT, DELETE and TBD methods
+     - A two-way connection TBD, over which sync and update messages are exchanged.
+2. A GUID denoting a WebRTC peer data channel, over which sync, get, and update message are exchanged.
+
+### Collection Names
+
+Right now it either built in reverse-DNS. Applications might sync with specific collections on specific services, or based on the type of collection name, or using some directory, etc. An app that syncs to peer services will presumably sync the service names defined by the app itself.
+
+The details of collection names is TBD, but to avoid name conflicts and garbage in relays, it is likely one of the following types:
+
+1. A name defined by this protocol: `Team`, `RecoveryTag`, `EncryptionKey`.
+2. Some sort of self-authorizing root. Maybe there's an "open collection" in which anyone can add name record. (Not clear how an "open collection" works or syncs. Might get censored by wherever it is stored.)
+3. A site URL root. https:// would be prefixed (unless localhost) and something postfixed to produce a url that must store a name record. Doesn't require trusting a site holding (2), but requiring an operating https means that there is some sort of contact info and a means for law enforcement to shut it down.
+4. Some sort of parent:guid designation for a name record. E.g., the parent is any of these four, which owns a collection with a well-known name that has name records.
+
+Presumably, a name record is a JWS whose owner matches the parent and whose subject matches the child.
+
 ### Credentials
 
 Credentials has all the same methods and properties as the default export of [@ki1r0y/distributed-security](https://github.com/kilroy-code/distributed-security), plus the following:
 
-Credentials.createAuthor()
-Credentials.authorizeAuthor()
-Credentials.synchronize()
-Credentials.author
-Credentials.owner
-Credentials.encryption
+#### Credentials Properties
+
+**author** - Applications set this to a tag string, which then becomes the default for `author` parameter to `store()` and `retrieve()`.
+
+**owner** - Applications set this to a tag string, which then becomes the default for `owner` parameter to `store()` and `retrieve()`.
+
+**encryption** - Applications set this to a tag string, which then becomes the default for `author` parameter to `store()` and `retrieve()`
+
+#### Credentials Methods
+
+**create()**
+
+**destroy()**
+
+**createAuthor()**
+
+**authorizeAuthor()**
+
+**getUserDeviceSecret()**
+
+**synchronize()**
+
 
 ### Collections
 
 ImmutableCollection
+
 MutableCollection
+
 VersionedCollection
 
-aCollection.store()
-aCollection.retrieve()
-aCollection.remove()
-aCollection.list() - order is not specifed
-aCollection.find()
+#### Collection Methods
+
+constructor()
+
+store()
+
+retrieve() - Decrypts the data, but only if any authorized `owner` in this browser is recursively a membership of the `owner` group specified by the operative `store()`.
+
+remove()
+
+list() - order is not specifed
+
+find() - will not work on encrypted data that the user is not authorized as per `retrieve()`.
+
+addEventListener()
+
+synchronize()

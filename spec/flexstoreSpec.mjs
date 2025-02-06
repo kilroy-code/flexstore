@@ -2,8 +2,9 @@ import { Persist, Credentials, ImmutableCollection, MutableCollection, Versioned
 const { describe, beforeAll, afterAll, it, expect, expectAsync } = globalThis;
 
 describe('Flexstore', function () {
-  let user, otherUser, team;
+  let user, otherUser, team, randomUser;
   const services = ['/', 'https://ki1r0y.com/flex/'];
+  const blocks = Array.from({length: 1000}, (_, index) => ({index}));
   beforeAll(async function () {
     Credentials.synchronize(services);
     // TODO:getUserDeviceSecret => prompt
@@ -14,12 +15,15 @@ describe('Flexstore', function () {
     };
     //window.Security = Credentials;
 
-    // Make a user.
+    // user, otherUser, and randomUser are distinct users authorized on this machine. Only user and otherUser are on team.
     user = Credentials.author = await Credentials.createAuthor('test pin:');
-    otherUser = await Credentials.createAuthor('airspeed?');
+    otherUser = await Credentials.createAuthor('airspeed velocity?');
     team = await Credentials.create(Credentials.author, otherUser);
-  }, 15e3);
+    randomUser = await Credentials.createAuthor("favorite color?");
+    
+  }, 20e3);
   afterAll(async function () {
+    await Credentials.destroy({tag: randomUser, recursiveMembers: true});
     await Credentials.destroy({tag: otherUser, recursiveMembers: true});
     await Credentials.destroy(team);
     await Credentials.destroy({tag: user, recursiveMembers: true});
@@ -52,6 +56,11 @@ describe('Flexstore', function () {
       //beforeEach(function () { collection.debug = false; });
       it('stores.', function () {
 	expect(typeof tag).toBe('string');
+      });
+      it('cannot be written by a different user (even with the same data).', async function () {
+	collection.debug = true;
+	await expectAsync(collection.store(data, {tag, author: randomUser})).toBeRejected();
+	collection.debug = false;
       });
       it('retrieves.', async function () {
 	const signature = await collection.retrieve(tag);
@@ -94,14 +103,69 @@ describe('Flexstore', function () {
 	  await restoreCheck(data, newData, newSignature, tag2, tag3, collection);
 	});
 	it('cannot be written by non-team member.', async function () {
-	  let random = await Credentials.createAuthor("who knows?");
-	  await expectAsync(collection.store({whatever: 'ignored'}, {tag: tag2, author: random})).toBeRejected();
-	  await Credentials.destroy({tag: random, recursiveMembers: true});
-	}, 10e3);
+	  await expectAsync(collection.store({whatever: 'ignored'}, {tag: tag2, author: randomUser})).toBeRejected();
+	});
 	it('adds to list.', async function () {
 	  const list = await collection.list();
 	  expect(list).toContain(tag);
 	  expect(list).toContain(tag2);
+	});
+      });
+      describe('performance', function () {
+	describe('serial', function () {
+	  let tags = Array(blocks.length), writesPerSecond;
+	  beforeAll(async function () {
+	    //console.log(label, 'author/owner', Credentials.author, Credentials.owner);
+	    const start = Date.now();
+	    let i = 0;
+	    for (const datum of blocks)  {
+	      tags[i++] = await collection.store(datum);
+	    }
+	    const elapsed = Date.now() - start;
+	    writesPerSecond = blocks.length / (elapsed / 1e3);
+	    console.log(label, 'serial writes/second', writesPerSecond);
+	  });
+	  afterAll(async function () {
+	    await Promise.all(tags.map(tag => collection.remove({tag})));
+	  });
+	  it('writes.', function () {
+	    expect(writesPerSecond).toBeGreaterThan(200);
+	  });
+	  it('reads.', async function () {
+	    const start = Date.now();
+	    for (const tag of tags)  {
+	      await collection.retrieve(tag);
+	    }
+	    const elapsed = Date.now() - start;
+	    const readsPerSecond = blocks.length / (elapsed / 1e3);
+	    console.log(label, 'serial reads/second', readsPerSecond);
+	    expect(readsPerSecond).toBeGreaterThan(500);
+	  });
+	});
+	describe('parallel', function () {
+	  let tags = Array(blocks.length), writesPerSecond;
+	  beforeAll(async function () {
+	    //console.log(label, 'author/owner', Credentials.author, Credentials.owner);
+	    const start = Date.now();
+	    tags = await Promise.all(blocks.map(datum => collection.store(datum)));
+	    const elapsed = Date.now() - start;
+	    writesPerSecond = blocks.length / (elapsed / 1e3);
+	    console.log(label, 'parallel writes/second', writesPerSecond);
+	  });
+	  afterAll(async function () {
+	    await Promise.all(tags.map(tag => collection.remove({tag})));
+	  });
+	  it('writes.', function () {
+	    expect(writesPerSecond).toBeGreaterThan(400);
+	  });
+	  it('reads.', async function () {
+	    const start = Date.now();
+	    await Promise.all(tags.map(tag => collection.retrieve(tag)));
+	    const elapsed = Date.now() - start;
+	    const readsPerSecond = blocks.length / (elapsed / 1e3);
+	    console.log(label, 'parallel reads/second', readsPerSecond);
+	    expect(readsPerSecond).toBeGreaterThan(1500);
+	  });
 	});
       });
     });

@@ -128,6 +128,8 @@ class Collection extends EventTarget {
   }
 
   // These three ignore synchronization state, which if neeed is the responsibility of the caller.
+  // FIXME TODO: after initial development, these three should be made internal so that application codde
+  // does not call them.
   get(tag) { // Get the local raw signature data.
     return Persist.get(this.name, tag);
   }
@@ -143,15 +145,47 @@ class Collection extends EventTarget {
     return Persist.delete(this.name, validation.tag, signature); // Signature payload is empty.
   }
 
-  async validate(tag, signature, requireTag = false) {
-    let verified = await Credentials.verify(signature);
-    verified.tag = requireTag ? tag : this.tag(tag, verified);
-    if (verified) {
-      this.dispatchEvent(new CustomEvent('update', {detail: verified}));
-      return verified;
-    }
-    console.warn(`Signature is not valid for ${tag}.`);
+  notifyInvalid(tag, message = undefined) {
+    console.warn(this.name, message || // fixme remove after development
+		 `Signature is not valid for ${tag || 'data'}.`);
     return undefined;
+  }
+  async validate(tag, signature, requireTag = false) {
+    const verified = await Credentials.verify(signature);
+    if (!verified) return this.notifyInvalid(tag);
+    tag = verified.tag = requireTag ? tag : this.tag(tag, verified);
+    const existingSignature = await this.get(tag);
+    if (existingSignature) {
+      const existingVerified = await Credentials.verify(existingSignature);
+      const existing = existingVerified.protectedHeader;
+      const proposed = verified.protectedHeader;
+      if (proposed.iat < existing.iat) return this.notifyInvalid(tag, 'replay');
+      const existingOwner = existing.iss || existing.kid;
+      const proposedOwner = proposed.iss || proposed.kid;
+      // Exact match. Do we need to allow for an owner to transfer ownership to a sub/super/disjoint team?
+      // Currently, that would require a new record. (E.g., two Mutable/VersionedCollection items that
+      // have the same GUID payload property, but different tags. I.e., a different owner means a different tag.)
+      if (!proposedOwner || (proposedOwner !== existingOwner)) return this.notifyInvalid(tag, 'not owner');
+      /*
+	We are not checking to see if author is currently a member of the owner team here, which
+	is called by put()/delete() in two circumstances:
+	
+	this.validate() is called by put()/delete() which happens in the app (via store()/remove())
+	and during sync from another service:
+	
+	1. From the app (vaia store()/remove(), where we have just created the signature. Signing itself
+	will fail if the (1-hour cached) key is no longer a member of the team. There is no interface
+	for the app to provide an old signature. (TODO: after we make get/put/delete internal.)
+	
+	2. During sync from another service, where we are pulling in old records for which we don't have
+	team membership from that time.
+
+	If the app cares whether the author has been kicked from the team, the app itself will have to check.
+	TODO: we should provide a tool for that.
+       */
+    }
+    this.dispatchEvent(new CustomEvent('update', {detail: verified}));
+    return verified;
   }
 
   promise(key, thunk) { return thunk; } // TODO: how will we keep track of overlapping distinct syncs?
