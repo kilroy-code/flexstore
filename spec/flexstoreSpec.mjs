@@ -6,11 +6,13 @@ describe('Flexstore', function () {
   const services = ['/', 'https://ki1r0y.com/flex/'];
   beforeAll(async function () {
     Credentials.synchronize(services);
-    Credentials.prompt = function (tag, promptString) { // Used when first creating a user credential, or when adding an existing credential to a new device.
+    // FIXME:getUserDeviceSecret => prompt
+    Credentials.getUserDeviceSecret  = function (tag, promptString) { // Used when first creating a user credential, or when adding an existing credential to a new device.
       function swizzle(seed) { return seed + 'appSalt'; } // Could also look up in an app-specific customer database.
       if (prompt) return swizzle(promptString); // fixme prompt(promptString)); 
       return swizzle(tag);
     };
+    window.Security = Credentials;
 
     // Make a user.
     user = Credentials.author = await Credentials.createAuthor('test pin:');
@@ -21,6 +23,7 @@ describe('Flexstore', function () {
     await Credentials.destroy({tag: otherUser, recursiveMembers: true});
     await Credentials.destroy(team);
     await Credentials.destroy({tag: user, recursiveMembers: true});
+    //console.log(Persist.lists); // Did we clean up? Note that versions never go away.
   });
   function testCollection(collection, restoreCheck) {
     const label = collection.constructor.name;

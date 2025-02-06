@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>flexstore tests</title>
+
+    <meta name="viewport" content="initial-scale=1, viewport-fit=cover">
+
+    <link rel="stylesheet" href="/jasmine-standalone-4.5.0/lib/jasmine-4.5.0/jasmine.css">
+    <script src="/jasmine-standalone-4.5.0/lib/jasmine-4.5.0/jasmine.js"></script>
+    <script src="/jasmine-standalone-4.5.0/lib/jasmine-4.5.0/jasmine-html.js"></script>
+    <script src="/jasmine-standalone-4.5.0/lib/jasmine-4.5.0/boot0.js"></script>
+    <!-- optional: include a file here that configures the Jasmine env -->
+    <script src="/jasmine-standalone-4.5.0/lib/jasmine-4.5.0/boot1.js"></script>
+
+    <script>
+      // See https://github.com/WICG/import-maps#dynamic-import-map-example
+      const url = new URL(location.href);
+      if (url.hostname === 'localhost') {
+	url.port = 59693;
+      } else {
+	url.protocol = "https:"
+	url.host = "cloud.ki1r0y.com";
+	url.port = "";
+      }
+      url.pathname = "/@ki1r0y/distributed-security/dist/index-bundle.mjs";
+      console.log(`Mapping distributed-security to ${url.href}.`);
+      const importMap = {
+	"imports": {
+          "@ki1r0y/distributed-security": url.href
+	}
+      };
+      const im = document.createElement('script');
+      im.type = 'importmap';
+      im.textContent = JSON.stringify(importMap);
+      document.currentScript.after(im);
+    </script>
+
+
+    <script type="module">
+      import "./spec/flexstoreSpec.mjs";
+    </script>
+  </head>
+  <body>
+    <button onclick=runtests()>start</button></h3>
+  </body>
+</html>

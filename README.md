@@ -60,7 +60,7 @@ async function someApp(someTag, currentUserTag) {
 //
 // In a browser. These few lines both cover and ignore a lot of complexity.
 let currentAuthorTag = localStorage.getItem('existingTag'); // From last time, if any.
-Credentials.prompt = function (tag, promptString) { // Used when first creating a user credential, or when adding an existing credential to a new device.
+Credentials.getUserDeviceSecret = function (tag, promptString) { // Used when first creating a user credential, or when adding an existing credential to a new device.
   function swizzle(seed) { return seed + 'appSalt'; } // Could also look up in an app-specific customer database.
   if (prompt) return swizzle(prompt(promptString)); 
   return swizzle(tag);
