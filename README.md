@@ -215,7 +215,7 @@ The synchronization process exchanges the following messages: _TBD_
 
 Regardless of whether a JWS comes from the client or another service, an implementation should do the following before persisting the JWS:
 
-... clean up deep verification explanation from [distributed-security](https://github.com/kilroy-code/distributed-security/blob/main/docs/advanced.md#signatures-with-multiple-tags-and-other-signature-options)...
+_TBD ... clean up deep verification explanation from [distributed-security](https://github.com/kilroy-code/distributed-security/blob/main/docs/advanced.md#signatures-with-multiple-tags-and-other-signature-options)..._
 
 ### Key Management
 
@@ -231,27 +231,27 @@ In addition, the tags are url-safe base64 encodings of the public verification k
 
 ### Service Names
 
-TBD, but one of two things:
+_TBD, but one of two things:_
 
-1. A hosted relay, specified via a URL for the specific collection. Must provide:
-   - GET method for an endpoint formed by the url/:tag.jws.
-   - Either 
-     - PUT, DELETE and TBD methods
-     - A two-way connection TBD, over which sync and update messages are exchanged.
-2. A GUID denoting a WebRTC peer data channel, over which sync, get, and update message are exchanged.
+1. _A hosted relay, specified via a URL for the specific collection. Must provide:_
+   - _GET method for an endpoint formed by the url/:tag.jws._
+   - _Either _
+     - _PUT, DELETE and TBD methods_
+     - _A two-way connection TBD, over which sync and update messages are exchanged._
+2. _A GUID denoting a WebRTC peer data channel, over which sync, get, and update message are exchanged._
 
 ### Collection Names
 
-TBD Right now it is built in reverse-DNS. Applications might sync with specific collections on specific services, or based on the type of collection name, or using some directory, etc. An app that syncs to peer services will presumably sync the service names defined by the app itself.
+_TBD Right now it is built in reverse-DNS. Applications might sync with specific collections on specific services, or based on the type of collection name, or using some directory, etc. An app that syncs to peer services will presumably sync the service names defined by the app itself._
 
-The details of collection names is TBD, but to avoid name conflicts and garbage in relays, it is likely one of the following types:
+_The details of collection names is TBD, but to avoid name conflicts and garbage in relays, it is likely one of the following types:_
 
-1. A name defined by this protocol: `Team`, `RecoveryTag`, `EncryptionKey`.
-2. Some sort of self-authorizing root. Maybe there's an "open collection" in which anyone can add name record. (Not clear how an "open collection" works or syncs. Might get censored by wherever it is stored.)
-3. A site URL root. https:// would be prefixed (unless localhost) and something postfixed to produce a url that must store a name record. Doesn't require trusting a site holding (2), but requiring an operating https means that there is some sort of contact info and a means for law enforcement to shut it down.
-4. Some sort of parent:guid designation for a name record. E.g., the parent is any of these four, which owns a collection with a well-known name that has name records.
+1. _A name defined by this protocol: `Team`, `RecoveryTag`, `EncryptionKey`._
+2. _Some sort of self-authorizing root. Maybe there's an "open collection" in which anyone can add name record. (Not clear how an "open collection" works or syncs. Might get censored by wherever it is stored.)_
+3. _A site URL root. https:// would be prefixed (unless localhost) and something postfixed to produce a url that must store a name record. Doesn't require trusting a site holding (2), but requiring an operating https means that there is some sort of contact info and a means for law enforcement to shut it down._
+4. _Some sort of parent:guid designation for a name record. E.g., the parent is any of these four, which owns a collection with a well-known name that has name records._
 
-Presumably, a name record is a JWS whose owner matches the authorizing parent (if any) and whose subject matches the child.
+_Presumably, a name record is a JWS whose owner matches the authorizing parent (if any) and whose subject matches the child._
 
 ### Credentials
 
@@ -294,7 +294,7 @@ constructor()
 
 store()
 
-retrieve() - Also ecrypts the data if needed, but only if any authorized `owner` in this browser is recursively a membership of the `owner` group specified by the operative `store()`.
+retrieve() - Also encrypts the data if needed, but only if any authorized `owner` in this browser is recursively a membership of the `owner` group specified by the operative `store()`.
 
 remove()
 
