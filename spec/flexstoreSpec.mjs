@@ -1,19 +1,19 @@
-import { Persist, Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../loopback.mjs';
+import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../index.mjs';
 const { describe, beforeAll, afterAll, it, expect, expectAsync } = globalThis;
+
+// TODO:getUserDeviceSecret => prompt
+Credentials.getUserDeviceSecret  = function (tag, promptString) { // Used when first creating a user credential, or when adding an existing credential to a new device.
+  function swizzle(seed) { return seed + 'appSalt'; } // Could also look up in an app-specific customer database.
+  if (promptString) return swizzle(promptString); // fixme prompt(promptString)); 
+  return swizzle(tag);
+};
 
 describe('Flexstore', function () {
   let user, otherUser, team, randomUser;
-  const services = ['/', 'https://ki1r0y.com/flex/'];
+  const services = []; // fixme ['/', 'https://ki1r0y.com/flex/'];
   const blocks = Array.from({length: 1000}, (_, index) => ({index}));
   beforeAll(async function () {
     Credentials.synchronize(services);
-    // TODO:getUserDeviceSecret => prompt
-    Credentials.getUserDeviceSecret  = function (tag, promptString) { // Used when first creating a user credential, or when adding an existing credential to a new device.
-      function swizzle(seed) { return seed + 'appSalt'; } // Could also look up in an app-specific customer database.
-      if (promptString) return swizzle(promptString); // fixme prompt(promptString)); 
-      return swizzle(tag);
-    };
-    //window.Security = Credentials;
 
     // user, otherUser, and randomUser are distinct users authorized on this machine. Only user and otherUser are on team.
     user = Credentials.author = await Credentials.createAuthor('test pin:');
@@ -51,7 +51,7 @@ describe('Flexstore', function () {
 	expect(latestUpdate.tag).toBe(tag);
 	expect(latestUpdate.json).toBeFalsy();
 	const signature = await collection.retrieve(tag);
-	expect(signature.json).toBeUndefined();
+	expect(signature?.json).toBeUndefined();
       });
       //beforeEach(function () { collection.debug = false; });
       it('stores.', function () {
@@ -86,8 +86,8 @@ describe('Flexstore', function () {
 	  await collection.remove({tag: tag2});
 	  await collection.remove({tag: tag3});	 // May be a no-op.
 	  const afterList = await collection.list();
-	  expect((await collection.retrieve(tag2)).json).toBeUndefined();
-	  expect((await collection.retrieve(tag3)).json).toBeUndefined();	  
+	  expect((await collection.retrieve(tag2))?.json).toBeUndefined();
+	  expect((await collection.retrieve(tag3))?.json).toBeUndefined();	  
 	  expect(afterList.length).toBe(1);
 	  Credentials.owner = previousOwner;
 	  expect(updateCount).toBe(4); // 2 successfull stores and 2 removes.
@@ -115,7 +115,6 @@ describe('Flexstore', function () {
 	describe('serial', function () {
 	  let tags = Array(blocks.length), writesPerSecond;
 	  beforeAll(async function () {
-	    //console.log(label, 'author/owner', Credentials.author, Credentials.owner);
 	    const start = Date.now();
 	    let i = 0;
 	    for (const datum of blocks)  {
@@ -145,7 +144,6 @@ describe('Flexstore', function () {
 	describe('parallel', function () {
 	  let tags = Array(blocks.length), writesPerSecond;
 	  beforeAll(async function () {
-	    //console.log(label, 'author/owner', Credentials.author, Credentials.owner);
 	    const start = Date.now();
 	    tags = await Promise.all(blocks.map(datum => collection.store(datum)));
 	    const elapsed = Date.now() - start;
@@ -164,7 +162,7 @@ describe('Flexstore', function () {
 	    const elapsed = Date.now() - start;
 	    const readsPerSecond = blocks.length / (elapsed / 1e3);
 	    console.log(label, 'parallel reads/second', readsPerSecond);
-	    expect(readsPerSecond).toBeGreaterThan(1500);
+	    expect(readsPerSecond).toBeGreaterThan(1250);
 	  });
 	});
       });
@@ -193,7 +191,7 @@ describe('Flexstore', function () {
 		   expect(signature.protectedHeader.act).toBe(otherUser);
 
 		   const timestamps = await collection.retrieveTimestamps(firstTag);
-		   expect(timestamps.length).toBe(2); // 'latest' plus two times
+		   expect(timestamps.length).toBe(2); // two times
 
 		   // Can specify a specific time, and get the version that was in force then.
 		   

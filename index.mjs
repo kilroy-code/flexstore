@@ -1,31 +1,17 @@
 import Credentials from "@ki1r0y/distributed-security";
 export { Credentials };
+import Persist from "./persist-indexeddb.mjs";
 const { CustomEvent } = globalThis;
 
-// todo: do not export
-export const Persist = { // TODO: use indexeddb in browser, fs in NodeJS
-  stores: {},
-  async put(collectionName, tag, payload) {
-    this.stores[collectionName] ||= {};
-    this.stores[collectionName][tag] = payload;
-    return tag;
-  },
-  async delete(collectionName, tag, payload) {
-    // We cannot remove items because merging with an earlier write would restore the item!
-    this.put(collectionName, tag, payload);
-    return tag;
-  },
-  async get(collectionName, tag) {
-    this.stores[collectionName] ||= {};
-    return this.stores[collectionName][tag];
-  }
-};
+window.Persist = Persist;
+window.Credentials = Credentials;
 
 class Collection extends EventTarget {
-  constructor({name, services = []}) {
+  constructor({name, services = [], preserveDeletions = services.length}) {
     super();
-    Object.assign(this, {name});
+    Object.assign(this, {name, preserveDeletions});
     this.synchronize(services);
+    this.persist = new Persist({collectionName: this.name});
   }
   services =[]; // To keep different services in sync, we cannot depend on order.
 
@@ -68,7 +54,7 @@ class Collection extends EventTarget {
     // TODO: put on all services
     const signature = await Credentials.sign(data, signingOptions);
     return (await this.put(tag, signature)) ||
-      this.fail('store', data, options.member || options.tags[0]);
+      this.fail('store', data, signingOptions.member || signingOptions.tags[0]);
   }
   async remove(options = {}) { // Note: Really just replacing with empty data forever. Otherwise merging with earlier data will bring it back!
     // TODO: Provide some mechanism to really destroy something, and use it in tests.
@@ -77,7 +63,7 @@ class Collection extends EventTarget {
     // No need to await synchronization
     // TODO: delete on all services.
     return (await this.delete(tag, await Credentials.sign('', signingOptions))) ||
-      this.fail('remove', tag, options.member || options.tags[0]);;
+      this.fail('remove', tag, signingOptions.member || signingOptions.tags[0]);;
   }
   async retrieve(tag) {
     await this.synchronize1(tag);
@@ -133,20 +119,27 @@ class Collection extends EventTarget {
   // FIXME TODO: after initial development, these three should be made internal so that application codde
   // does not call them.
   get(tag) { // Get the local raw signature data.
-    return Persist.get(this.name, tag);
+    if (!tag) throw new Error('why not tag?');
+    return this.persist.get(tag);
   }
   // These two can be triggered by client code or by any service.
   async put(tag, signature) { // Put the raw signature locally and the specified services.
     const validation = await this.validate(tag, signature);
     if (!validation) return undefined;
     await this.addTag(validation.tag);
-    return Persist.put(this.name, validation.tag, signature);
+    await this.persist.put(validation.tag, signature);
+    return validation.tag; // Don't rely on the returned value of persist.put.
   }
   async delete(tag, signature) { // Remove the raw signature locally and on the specified services.
     const validation = await this.validate(tag, signature, 'requireTag');
     if (!validation) return undefined;
     await this.deleteTag(tag);
-    return Persist.delete(this.name, validation.tag, signature); // Signature payload is empty.
+    if (this.preserveDeletions) { // Signature payload is empty.
+      await this.persist.put(validation.tag, signature); 
+    } else { // Really delete.
+      await this.persist.delete(validation.tag);
+    }
+    return validation.tag; // Don't rely on the returne value of persist.delete.
   }
 
   notifyInvalid(tag, message = undefined) {
@@ -237,18 +230,22 @@ export class MutableCollection extends Collection {
 export class VersionedCollection extends MutableCollection {
   constructor(...rest) {
     super(...rest);
-    this.versionName = this.name + 'Versions';
+    this.versions = new Persist({collectionName: this.name + 'Versions'});
+  }
+  async getVersions(tag) { // Answers parsed timestamp => version dictionary IF it exists, else falsy.
+    const json = await this.persist.get(tag);
+    if (!json) return undefined;
+    return JSON.parse(json);
   }
   async retrieveTimestamps(tag) {
-    const json = await Persist.get(this.name, tag);
-    if (!json) return undefined;
-    const timestamps = JSON.parse(json);
-    return Object.keys(timestamps).slice(1);
+    const versions = await this.getVersions(tag);
+    if (!versions) return versions;
+    return Object.keys(versions).slice(1);
   }
   async get(tagOrOptions) { // Get the local raw signature data.
     const isTag = typeof(tagOrOptions) === 'string';
     const tag = isTag ? tagOrOptions : tagOrOptions.tag;
-    const json = await Persist.get(this.name, tag);
+    const json = await this.persist.get(tag);
     if (!json) return undefined;
     const timestamps = JSON.parse(json);
     const time = (!isTag && tagOrOptions.time) || timestamps.latest;
@@ -261,25 +258,34 @@ export class VersionedCollection extends MutableCollection {
       }
       hash = timestamps[best];
     }
-    return Persist.get(this.versionName, hash); // Will be empty if relevant timestamp doesn't exist (deleted).
+    if (!hash) return '';
+    return this.versions.get(hash); // Will be empty if relevant timestamp doesn't exist (deleted).
   }
   async put(tag, signature) { // The signature goes to a hash version, and the tag gets updated with a new time=>hash.
     const validation = await this.validate(tag, signature);
     if (!validation) return undefined;
     tag = this.tag(tag, validation);
-    const json = await Persist.get(this.name, tag);
-    const timestamps = json ? JSON.parse(json) : {};
+    const versions = await this.getVersions(tag) || {};
     const time = validation.protectedHeader.iat;
     const hash = validation.protectedHeader.sub;
-    timestamps.latest = time;
-    timestamps[time] = hash;
-    await Persist.put(this.versionName, hash, signature);
-    await Persist[validation.payload.length ? 'put' : 'delete'](this.name, tag, JSON.stringify(timestamps));
+    versions.latest = time;
+    versions[time] = hash;
+    await this.versions.put(hash, signature);
+    await this.persist.put(tag, JSON.stringify(versions));
     await this.addTag(tag);
     return tag;
   }
   async delete(tag, signature) { // Remove the raw signature locally and on the specified services.
-    tag = await this.put(tag, signature); // will add tag.
+    if (this.preserveDeletions) {
+      tag = await this.put(tag, signature); // Create a timestamp => version with an empty payload.
+    } else { // Really remove all versions and map.
+      const validation = await this.validate(tag, signature);
+      tag = this.tag(tag, validation);
+      const versions = this.getVersions(tag);
+      if (!versions) return tag;
+      await Promise.all(Object.values(versions).slice(1).map(tag => this.versions.delete(tag)));
+      await this.persist.delete(tag);
+    }
     await this.deleteTag(tag);
     return tag;
   }
