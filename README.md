@@ -1,4 +1,4 @@
-# @ki1r0y/flexstore
+# Flexstore
 
 Flexstore lets you easily and safely set up a key-value JSON store in a browser or NodeJS app, which _also_ lets you work offline, federate the storage across relay servers, and even p2p between browser clients. All changes are automatically shared in realtime, and an 'update' event can be listened for.
 
@@ -26,7 +26,7 @@ import { Credentials, MutableCollection, ImmutableCollection, VersionedCollectio
    from '@ki1r0y/flexstore';
 
 // An app can have several Collections, with different sets of online services.
-const services = ['/', 'https://ki1r0y.com/flex/'];
+const services = ['/', 'https://sharedCloud.com/flex/'];
 
 // Start synchronizing the app's collections with each of the reachable services.
 const media = new ImmutableCollection({name: 'com.acme.media, services});
@@ -47,7 +47,7 @@ const currentUser = setupCurrentUser(); // See below.
 
 In this example, the app synchronizes all users, groups, messages, and media -- not just the ones that the user is interested in.
 A stand-alone relay would probably do that, while a mobile client app would probably be more selective. 
-Collections can be as specialized as the app needs them to be. E.g., instead of "messages" for all groups, an app could make an "apple-group-ledger" collection, that has various kinds of items (e.g., message, iou, vote, ...).
+Collections can be as specialized as the app needs them to be. E.g., instead of "messages" for all groups, an app could make an "my-group-ledger" collection, that has various kinds of items (e.g., message, iou, vote, ...).
 
 
 ### Dynamic Sync:
@@ -82,7 +82,7 @@ function newMessage(messageSignature, tag) {
   appSpecificUpdateMessageDisplay(messageSignature.text, 
                                   senderSignature.json.name, 
                                   groupSignature.json.name
-								  mediaData.payload);
+                                  mediaData.payload);
 }
 ```
 
@@ -91,22 +91,22 @@ function newMessage(messageSignature, tag) {
 
 In the operations above, only the `Credentials.author` has beeen set, and not a `Credentials.owner`. In this case, only the author will be able to `store()` new data or `remove()` it (for any mutable collection).
 
-We can arrange for any one of an enumerated group of users to be able to make changes, by specifying `Credentials.owner`.
+We can arrange for any one of an enumerated team of users to be able to make changes, by specifying an `owner` in addition to the `author`.
 
 ```
-const newOwnerTag = Credentials.create(currentUser, someOtherUserTag, andYetAnotherUserTag);
-Credentials.owner = newOwnerTag;
-// New items stored will be readable only by currentUser, someOtherUserTag, andYetAnotherUserTag.
+const teamAlice = Credentials.create(currentUser, someOtherUserTag, yetAnotherUserTag);
+Credentials.owner = teamAlice; // New items stored will be readable only by teamAlice.
+// teamAlice membership can be changed later, without effecting signatures/encryption!
 
 // We can use this tag in other data, and as tags in MutableCollections.
-// Here we use the named argument form of store().
+// Here we use the named-argument form of store().
 const groupData = {name: 'Team Alice', description: 'Whatever'};
-await groups.store({data: groupData, tag: newOwnerTag}); // Credentials.owner default.
-userData.group = newOwnerTag;
-await users.store(data: userData, tag: currentUser, owner: currentUser}); // Changeable ONLY by Alice.
+await groups.store({data: groupData, tag: teamAlice}); // Credentials.owner default.
+userData.group = teamAlice;
+await users.store(data: userData, tag: currentUser, owner: currentUser});//override default
 ```
 
-By the way, a user can be on any number of owner teams, and teams can have other teams as members. In a distributed system (and arguably in all systems), this way of specifying ownership is more flexible than trying to maintain a set of "write permissions" via an access control list. The owner can be specified individually on each `store()` -- specifying a current `Credentials.owner` is just a convenience. 
+By the way, a user can be on any number of owner teams, and teams can have other teams as members. In a distributed system (and arguably in all systems), this way of specifying ownership is more flexible than trying to maintain a set of "write permissions" via an access control list. 
 
 
 ### Encryption
@@ -114,8 +114,8 @@ By the way, a user can be on any number of owner teams, and teams can have other
 We can also arrange for only the members of a tag to be able to _read_ the data. This is done by encrypting the data on the client before it is signed, and decrypting it on the client after it is verfied. 
 
 ```
-store({data, encryption: true}); // For owner if specified here or by default, otherwise just author.
-store({data, encryption: tag}); // Mmembers of tag to read, regardless of Credentials.owner. 
+store({data, encryption: true}); // For owner (or default author).
+store({data, encryption: tag}); // Members of tag to read, regardless of Credentials.owner. 
    // The Credentials.author does NOT have be a members of tag to write, only to read!
 
 Credentials.encryption = true; // Set up a default for above.
@@ -133,7 +133,7 @@ function setupCurrentUser() {
 
   // Always return the same secret for the same user tag and optional promptString.
   function getUserSecret(tag, promptString = '') { 
-    function swizzle(seed) { return seed + 'appSalt'; } // Could also look in a customer database.
+    function swizzle(seed) { return seed + 'appSalt'; } // Could look in a customer db.
     if (prompt) return swizzle(prompt(promptString)); // Ask user for a secret!
     return swizzle(tag);
   };
@@ -143,15 +143,15 @@ function setupCurrentUser() {
   
   if (!tag) { // If there isn't a tag from last time...
     const username = prompt("Your existing username? Blank for none.");
-    const currentAuthorTag = username && await users.find({name: username}); // in users collection
+    let existingAuthor = username && await users.find({name: username});
     // ...if username provided and it exists, try to authorize it on this machine, ...
-    if (currentAuthorTag) { 
+    if (existingAuthor) { 
       // ...which will call Credentials.getUserDeviceSecret and check the answer.
-      await Credentials.authorizeAuthor(currentAuthorTag).catch(_ => currentAuthorTag = null);
+      await Credentials.authorizeAuthor(existingAuthor).catch(_ => existingAuthor = null);
     }
-    if (!currentAuthorTag) { // Wasn't entered, found, or matched.
+    if (!existingAuthor) { // Wasn't entered, found, or matched.
       // Create one, which will call Credentials.getUserDeviceSecret and save the response.
-      currentAuthorTag = await Credentials.createAuthor({prompt: "Enter a pin:"});
+      existingAuthor = await Credentials.createAuthor({prompt: "Enter a pin:"});
     }
     localStorage.setItem('existingTag', tag); // Save for next time.
   }
@@ -201,7 +201,6 @@ A common use of `VersionedCollection` is to keep track of each item in a series 
 
 When synchronizing, each side sends over a list of [tag, listOfPayloadHashes]. Any missing items are retrieved and added to the object. (Note that `aVersionedCollection.retrieve(tag, optionalTimestamp)` produces a single signature with a particular timestamp -- there is no collected-works signature that we need to worry about forging. In the extremely unlikely event of a duplicate timestamp with different hashes, the deterministic preference algorithm is used to define the order in which _both_ items are included, generating a floating point timestamp in between the existing others.
 
----
 ---
 
 ## API
