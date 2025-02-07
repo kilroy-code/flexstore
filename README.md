@@ -106,7 +106,7 @@ userData.group = teamAlice;
 await users.store(data: userData, tag: currentUser, owner: currentUser});//override default
 ```
 
-By the way, a user can be on any number of owner teams, and teams can have other teams as members. In a distributed system (and arguably in all systems), this way of specifying ownership is more flexible than trying to maintain a set of "write permissions" via an access control list. 
+A user can be on any number of owner teams, and teams can have other teams as members. In a distributed system (and arguably in all systems), this way of specifying ownership is more flexible than trying to maintain a set of "write permissions" via an access control list. 
 
 
 ### Encryption
@@ -115,8 +115,8 @@ We can also arrange for only the members of a tag to be able to _read_ the data.
 
 ```
 store({data, encryption: true}); // For owner (or default author).
-store({data, encryption: tag}); // Members of tag to read, regardless of Credentials.owner. 
-   // The Credentials.author does NOT have be a members of tag to write, only to read!
+store({data, encryption: tag}); // Members of tag can read.
+// The Credentials.author does NOT have be a members of tag to write, only to read!
 
 Credentials.encryption = true; // Set up a default for above.
 ```
@@ -144,7 +144,7 @@ function setupCurrentUser() {
   if (!tag) { // If there isn't a tag from last time...
     const username = prompt("Your existing username? Blank for none.");
     let existingAuthor = username && await users.find({name: username});
-    // ...if username provided and it exists, try to authorize it on this machine, ...
+    // If username provided and it exists, try to authorize it on this machine:
     if (existingAuthor) { 
       // ...which will call Credentials.getUserDeviceSecret and check the answer.
       await Credentials.authorizeAuthor(existingAuthor).catch(_ => existingAuthor = null);
