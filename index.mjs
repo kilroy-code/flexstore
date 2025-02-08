@@ -1,10 +1,11 @@
 import Credentials from "@ki1r0y/distributed-security";
 export { Credentials };
-import Persist from "./persist-indexeddb.mjs";
-const { CustomEvent } = globalThis;
+// TODO: conditional modules instead of dynamic import.
+const {Persist} = await import((typeof(process) !== 'undefined') ? "./persist-fs.mjs" : "./persist-indexeddb.mjs");
+const { CustomEvent, EventTarget } = globalThis;
 
-window.Persist = Persist;
-window.Credentials = Credentials;
+//window.Persist = Persist;
+//window.Credentials = Credentials;
 
 class Collection extends EventTarget {
   constructor({name, services = [], preserveDeletions = services.length}) {
@@ -232,10 +233,8 @@ export class VersionedCollection extends MutableCollection {
     super(...rest);
     this.versions = new Persist({collectionName: this.name + 'Versions'});
   }
-  async getVersions(tag) { // Answers parsed timestamp => version dictionary IF it exists, else falsy.
-    const json = await this.persist.get(tag);
-    if (!json) return undefined;
-    return JSON.parse(json);
+  getVersions(tag) { // Answers parsed timestamp => version dictionary IF it exists, else falsy.
+    return this.persist.get(tag);
   }
   async retrieveTimestamps(tag) {
     const versions = await this.getVersions(tag);
@@ -245,9 +244,8 @@ export class VersionedCollection extends MutableCollection {
   async get(tagOrOptions) { // Get the local raw signature data.
     const isTag = typeof(tagOrOptions) === 'string';
     const tag = isTag ? tagOrOptions : tagOrOptions.tag;
-    const json = await this.persist.get(tag);
-    if (!json) return undefined;
-    const timestamps = JSON.parse(json);
+    const timestamps = await this.persist.get(tag);
+    if (!timestamps) return undefined;
     const time = (!isTag && tagOrOptions.time) || timestamps.latest;
     let hash = timestamps[time];
     if (!hash) { // We need to find the timestamp that was in force at the requested time.
@@ -271,7 +269,7 @@ export class VersionedCollection extends MutableCollection {
     versions.latest = time;
     versions[time] = hash;
     await this.versions.put(hash, signature);
-    await this.persist.put(tag, JSON.stringify(versions));
+    await this.persist.put(tag, versions);
     await this.addTag(tag);
     return tag;
   }

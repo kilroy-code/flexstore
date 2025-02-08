@@ -1,4 +1,4 @@
-class Persist {
+export class Persist {
   // Asynchronous local storage, available in web workers.
   constructor({collectionName = 'collection', dbName = 'flexstore1'} = {}) {
     // Capture the data here, but don't open the db until we need to.
@@ -34,7 +34,7 @@ class Persist {
       this.transaction('readwrite').then(store => this.result(resolve, store.put(data, tag)));
     });
   }
-  delete(tag, data) { // Promise to really remove tag from collectionName. (Not just writing empty JWS payload.)
+  delete(tag) { // Promise to really remove tag from collectionName. (Not just writing empty JWS payload.)
     return new Promise(resolve => {
       this.transaction('readwrite').then(store => this.result(resolve, store.delete(tag)));
     });
