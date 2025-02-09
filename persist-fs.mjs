@@ -17,17 +17,6 @@ export async function mkdir(pathname) { // Make pathname exist, including any mi
   await fs.unlink(dummy);
 }
 
-/*
-  FIXME:
-
-  Most of flexstore stores JWS encoded as base64 strings. There are currently two exceptions.
-  1. Some (not all!) EncryptionKeys and Teams are multi-sig JWS objects.
-  2. VersionedCollection timestamp tables are objects.
-
-  If (1) was changed to always encode as strings (like other JWS), then we could change (2) to explicitly
-  use JSON.stringify/parse.  Then we would not need to guess here in put/get.
- */
-
 export class Persist {
   // Asynchronous local storage using the Node file system.
   //
