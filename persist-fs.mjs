@@ -54,12 +54,15 @@ export class Persist {
   get(tag) { // Promise to retrieve tag from collectionName.
     return this.queue = this.queue.then(async () => {
       return fs.readFile(this.path(tag), {encoding: 'utf8'})
-	.then(data => data.startsWith('{') ? JSON.parse(data) : data) // Ugh! See fixme, above.
+	.then(data => data.startsWith('--{') ? JSON.parse(data.slice(2)) : data) // Ugh! See fixme, above.
 	.catch(() => "");
     });
   }
   put(tag, data) { // Promise to store data at tag in collectionName.
-    if (typeof(data) !== 'string') data = JSON.stringify(data);
+    if (typeof(data) !== 'string') {
+      console.log('!!!!!!', this.collectionName, '!!!!', data);
+      data = '--' + JSON.stringify(data);
+    }
     return this.queue = this.queue.then(async () => {
       // Write to temp (as that is not atomic) and then rename (which is atomic).
       let temp = this.temporaryPath(tag),

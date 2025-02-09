@@ -16,6 +16,30 @@ class Collection extends EventTarget {
   }
   services =[]; // To keep different services in sync, we cannot depend on order.
 
+  // Credentials.sign/.verify can produce/accept JSON OBJECTS for the named "JSON Serialization" form.
+  // As it happens, distributed-security can distinguish between a compact serialization (base64 text)
+  // vs an object, but it does not recognize a SERIALIZED object. Here we bottleneck those operations
+  // such that the thing that is actuall persisted and synchronized is always a string -- either base64
+  // compact or JSON beginning with a "{" (which are distinguishable because "{" is not a base64 character).
+  static ensureString(signature) { // Return a signature that is definately a string.
+    if (typeof(signature) !== 'string') return JSON.stringify(signature);
+    return signature;
+  }
+  // Return a compact or "JSON" (object) form of signature (inflating a serialization of the latter if needed), but not a JSON string.
+  static maybeInflate(signature) {
+    if (signature?.startsWith?.("{")) return JSON.parse(signature);
+    return signature;
+  }
+  static async sign(data, options) {
+    const signature = await Credentials.sign(data, options);
+    return this.ensureString(signature);
+  }
+  static async verify(signature) {
+    signature = this.maybeInflate(signature);
+    const verified =  await Credentials.verify(signature);
+    return verified;
+  }
+
   // TODO: persist this.
   tags = new Set(); // Keeps track of our (undeleted) keys. Deleted keys are still present for sync'ing, so a db listing won't do.
   async addTag(tag) {
@@ -53,24 +77,22 @@ class Collection extends EventTarget {
     }
     // No need to await synchronization.
     // TODO: put on all services
-    const signature = await Credentials.sign(data, signingOptions);
+    const signature = await Collection.sign(data, signingOptions);
     return (await this.put(tag, signature)) ||
       this.fail('store', data, signingOptions.member || signingOptions.tags[0]);
   }
   async remove(options = {}) { // Note: Really just replacing with empty data forever. Otherwise merging with earlier data will bring it back!
-    // TODO: Provide some mechanism to really destroy something, and use it in tests.
-    // Maybe a 'temporary', 'unmergeable', or 'lifetime' option in store? (Persist would have to keep track of such like it does for List, and then remove would act?)
     const {encryption, tag, ...signingOptions} = this._canonicalizeOptions(options);
     // No need to await synchronization
     // TODO: delete on all services.
-    return (await this.delete(tag, await Credentials.sign('', signingOptions))) ||
+    return (await this.delete(tag, await Collection.sign('', signingOptions))) ||
       this.fail('remove', tag, signingOptions.member || signingOptions.tags[0]);;
   }
   async retrieve(tag) {
     await this.synchronize1(tag);
     const signature = await this.get(tag);
     if (!signature) return signature;
-    const verified = await Credentials.verify(signature);
+    const verified = await Collection.verify(signature);
     if (verified.protectedHeader.cty === this.encryptedMimeType) {
       const decrypted = await Credentials.decrypt(verified.text);
       verified.json = decrypted.json;
@@ -88,7 +110,7 @@ class Collection extends EventTarget {
   }
   async match(tag, properties) { // Is this signature what we are looking for?
     const signature = await this.get(tag);
-    const verified = await Credentials.verify(signature);  // OOF!
+    const verified = await Collection.verify(signature);  // OOF!
     const data = verified?.json;
     if (!data) return false;
     for (const key in properties) {
@@ -120,19 +142,19 @@ class Collection extends EventTarget {
   // FIXME TODO: after initial development, these three should be made internal so that application codde
   // does not call them.
   get(tag) { // Get the local raw signature data.
-    if (!tag) throw new Error('why not tag?');
+    if (!tag) throw new Error('No tag was supplied to get');
     return this.persist.get(tag);
   }
   // These two can be triggered by client code or by any service.
-  async put(tag, signature) { // Put the raw signature locally and the specified services.
-    const validation = await this.validate(tag, signature);
+  async put(tag, signature) { // Put the raw signature locally and on the specified services.
+    const validation = await this.validateForWriting(tag, signature);
     if (!validation) return undefined;
     await this.addTag(validation.tag);
     await this.persist.put(validation.tag, signature);
     return validation.tag; // Don't rely on the returned value of persist.put.
   }
   async delete(tag, signature) { // Remove the raw signature locally and on the specified services.
-    const validation = await this.validate(tag, signature, 'requireTag');
+    const validation = await this.validateForWriting(tag, signature, 'requireTag');
     if (!validation) return undefined;
     await this.deleteTag(tag);
     if (this.preserveDeletions) { // Signature payload is empty.
@@ -148,13 +170,14 @@ class Collection extends EventTarget {
 		 `Signature is not valid for ${tag || 'data'}.`);
     return undefined;
   }
-  async validate(tag, signature, requireTag = false) {
-    const verified = await Credentials.verify(signature);
+  async validateForWriting(tag, signature, requireTag = false) {
+    // A deep verify that checks against the existing item's (re-)verified headers.
+    const verified = await Collection.verify(signature);
     if (!verified) return this.notifyInvalid(tag);
     tag = verified.tag = requireTag ? tag : this.tag(tag, verified);
     const existingSignature = await this.get(tag);
     if (existingSignature) {
-      const existingVerified = await Credentials.verify(existingSignature);
+      const existingVerified = await Collection.verify(existingSignature);
       const existing = existingVerified.protectedHeader;
       const proposed = verified.protectedHeader;
       if (proposed.iat < existing.iat) return this.notifyInvalid(tag, 'replay');
@@ -168,7 +191,7 @@ class Collection extends EventTarget {
 	We are not checking to see if author is currently a member of the owner team here, which
 	is called by put()/delete() in two circumstances:
 	
-	this.validate() is called by put()/delete() which happens in the app (via store()/remove())
+	this.validateForWriting() is called by put()/delete() which happens in the app (via store()/remove())
 	and during sync from another service:
 	
 	1. From the app (vaia store()/remove(), where we have just created the signature. Signing itself
@@ -233,8 +256,9 @@ export class VersionedCollection extends MutableCollection {
     super(...rest);
     this.versions = new Persist({collectionName: this.name + 'Versions'});
   }
-  getVersions(tag) { // Answers parsed timestamp => version dictionary IF it exists, else falsy.
-    return this.persist.get(tag);
+  async getVersions(tag) { // Answers parsed timestamp => version dictionary IF it exists, else falsy.
+    const data = await this.persist.get(tag);
+    return Collection.maybeInflate(data); // No maybe about it, really.
   }
   async retrieveTimestamps(tag) {
     const versions = await this.getVersions(tag);
@@ -244,7 +268,7 @@ export class VersionedCollection extends MutableCollection {
   async get(tagOrOptions) { // Get the local raw signature data.
     const isTag = typeof(tagOrOptions) === 'string';
     const tag = isTag ? tagOrOptions : tagOrOptions.tag;
-    const timestamps = await this.persist.get(tag);
+    const timestamps = await this.getVersions(tag);
     if (!timestamps) return undefined;
     const time = (!isTag && tagOrOptions.time) || timestamps.latest;
     let hash = timestamps[time];
@@ -260,7 +284,7 @@ export class VersionedCollection extends MutableCollection {
     return this.versions.get(hash); // Will be empty if relevant timestamp doesn't exist (deleted).
   }
   async put(tag, signature) { // The signature goes to a hash version, and the tag gets updated with a new time=>hash.
-    const validation = await this.validate(tag, signature);
+    const validation = await this.validateForWriting(tag, signature);
     if (!validation) return undefined;
     tag = this.tag(tag, validation);
     const versions = await this.getVersions(tag) || {};
@@ -269,7 +293,7 @@ export class VersionedCollection extends MutableCollection {
     versions.latest = time;
     versions[time] = hash;
     await this.versions.put(hash, signature);
-    await this.persist.put(tag, versions);
+    await this.persist.put(tag, Collection.ensureString(versions));
     await this.addTag(tag);
     return tag;
   }
@@ -277,7 +301,7 @@ export class VersionedCollection extends MutableCollection {
     if (this.preserveDeletions) {
       tag = await this.put(tag, signature); // Create a timestamp => version with an empty payload.
     } else { // Really remove all versions and map.
-      const validation = await this.validate(tag, signature);
+      const validation = await this.validateForWriting(tag, signature);
       tag = this.tag(tag, validation);
       const versions = this.getVersions(tag);
       if (!versions) return tag;
@@ -309,16 +333,23 @@ Credentials.createAuthor = async (prompt) => {
   const [local, recovery] = await Promise.all([Credentials.create(), Credentials.create({prompt})]);
   return Credentials.create(local, recovery);
 };
+// These two are used directly by distributed-security.
 Credentials.Storage.retrieve = async (collectionName, tag) => {
   const collection = Credentials.collections[collectionName];
-  await collection.synchronize1(tag);
-  return collection.get(tag);
+  // No need to verify, as distributed-security does that itself quite carefully and team-aware.
+  await collection.synchronize1(tag); // But do make sure local storage is up to date.
+  const data = await collection.get(tag);
+  // However, since we have bypassed Collection.retrieve, we maybeInflate here.
+  return Collection.maybeInflate(data);
 }
 Credentials.Storage.store = async (collectionName, tag, signature) => {
+  // No need to validateForWriting, as distributed-security does that in a circularity-aware way.
+  // However, we do currently need to find out of the signature has a payload.
   // TODO: Modify dist-sec to have a separate store/delete, rather than having to await verify.
-  const verified = await Credentials.verify(signature);
+  const verified = await Collection.verify(signature);
   if (!verified) throw new Error(`Signature ${signature} does not verify.`);
   const collection = Credentials.collections[collectionName];
+  signature = Collection.ensureString(signature);
   if (verified.payload.length) return collection.put(tag, signature);
   return collection.delete(tag, signature);
 };
