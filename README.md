@@ -26,7 +26,7 @@ import { Credentials, MutableCollection, ImmutableCollection, VersionedCollectio
    from '@ki1r0y/flexstore';
 
 // An app can have several Collections, with different sets of online services.
-const services = ['/', 'https://sharedCloud.com/flex/'];
+const services = ['/', 'https://sharedCloud.org/flex/'];
 
 // Start synchronizing the app's collections with each of the reachable services.
 const media = new ImmutableCollection({name: 'com.acme.media, services});
