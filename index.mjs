@@ -5,15 +5,12 @@ export { Credentials };
 import Persist from './persist-hosted.mjs';
 const { CustomEvent, EventTarget } = globalThis;
 
-window.Persist = Persist;
-window.Credentials = Credentials;
-
 class Collection extends EventTarget {
   constructor({name, services = [], preserveDeletions = !!services.length}) {
     super();
     Object.assign(this, {name, preserveDeletions});
     this.synchronize(services);
-    this.persist = new Persist({collectionName: this.name});
+    this.persist = new Persist({collection: this});
   }
   services =[]; // To keep different services in sync, we cannot depend on order.
 
@@ -255,7 +252,7 @@ export class MutableCollection extends Collection {
 export class VersionedCollection extends MutableCollection {
   constructor(...rest) {
     super(...rest);
-    this.versions = new Persist({collectionName: this.name + 'Versions'});
+    this.versions = new Persist({collection: this, collectionName: this.name + 'Versions'});
   }
   async getVersions(tag) { // Answers parsed timestamp => version dictionary IF it exists, else falsy.
     const data = await this.persist.get(tag);
@@ -357,3 +354,4 @@ Credentials.Storage.store = async (collectionName, tag, signature) => {
 Credentials.collections = {};
 ['EncryptionKey', 'KeyRecovery', 'Team'].forEach(name => Credentials.collections[name] = new MutableCollection({name}));
 
+Object.assign(globalThis, {Persist, Credentials, ImmutableCollection, MutableCollection, VersionedCollection}); // fixme remove

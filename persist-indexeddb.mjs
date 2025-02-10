@@ -1,11 +1,11 @@
 export class Persist {
   // Asynchronous local storage, available in web workers.
-  constructor({collectionName = 'collection', dbName = 'flexstore1'} = {}) {
+  constructor({collection, collectionType = collection.constructor.name, collectionName = collection.name, dbName = 'flexstore1'} = {}) {
     // HACK. FIXME. We reverse collectionName and dbName so that each collection is its own db.
     // TODO: Arrange so that if an existing db is opened without the needed collectionName as an objectStore,
     // re-open with a new version and createObjectStore in upgradeneeded. Alas, I was not initially able
     // to do this without existing collections hanging.
-    this.collectionName = 'test';
+    this.collectionName = dbName;
     this.dbName = collectionName;
 
     this.version = 1;

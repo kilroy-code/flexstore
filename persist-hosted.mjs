@@ -1,11 +1,13 @@
+import {tagPath, basePath} from './tagPath.mjs';
+
 export class PersistHosted {
   // Asynchronous local storage using the Node file system.
-  constructor({collectionName = 'collection', dbName = '/flexstore'} = {}) {
+  constructor({collection, collectionType = collection.constructor.name, collectionName = collection.name, dbName = '/flexstore'} = {}) {
     this.collectionName = collectionName;
-    this.base = dbName;
+    this.base = basePath(dbName, collectionType, collectionName);
   }
-  path(tag) { // TODO: split up by type (immutable, mutable, versioned).
-    return `${this.base}/${this.collectionName}/${tag}`;
+  path(tag) {
+    return tagPath(this.base, tag, '');
   }
   fail(tag, response) {
     // console.warn(this.collectionName, tag, response.statusText); // Browse reports this.

@@ -1,11 +1,7 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import {randomBytes} from 'node:crypto';
-//import {tagPath} from './tagPath.mjs';
-function tagPath(collectionName, tag, extension = 'json') { // Pathname to tag resource.
-  if (!tag) return collectionName;
-  return `${collectionName}/${tag}.${extension}`;
-}
+import {tagPath, basePath} from './tagPath.mjs';
 
 export async function mkdir(pathname) { // Make pathname exist, including any missing directories.
   if (!await fs.mkdir(pathname, {recursive: true})) return;
@@ -26,20 +22,21 @@ export class Persist {
   // - They are still safe between processes - store/remove are atomic
   // - Within a process, the are deterministic because all operationss queued.
 
-  constructor({collectionName = 'collection', dbName = 'asyncLocalStorage', temporarySubdirectory = 'temp'} = {}) {
+  constructor({collection, collectionType = collection.constructor.name, collectionName = collection.name, dbName = 'asyncLocalStorage', temporarySubdirectory = 'temp'} = {}) {
     this.collectionName = collectionName;
-    this.base = dbName;
-    this.path = tag => path.join(dbName, tagPath(collectionName, tag, 'text'));
+    this.base = path.resolve(basePath(dbName, collectionType, collectionName));
     // The temporary files are all in the same temporarySubdirectory which is
     // 1. Created just once when creating the collection.
     // 2. A subdirectory of the collection, so that it is on the same file system.
-    this.temporaryPath = tag => path.join(dbName, collectionName, temporarySubdirectory,
+    this.temporaryPath = tag => path.join(this.base, temporarySubdirectory,
                                           tag + randomBytes(6).readUIntLE(0,6).toString(36));
     // Ensure path to collectionName and it's temporarySubdirectory. No errors if parts exist.
     // Also the first item in our queue. (constructors cannot be async, but we want to ensure the path exists before any ops).
-    this.queue = mkdir(path.join(dbName, collectionName, temporarySubdirectory));
+    this.queue = mkdir(path.join(this.base, temporarySubdirectory));
   }
-
+  path(tag) {
+    return tagPath(this.base, tag, '');
+  }
   get(tag) { // Promise to retrieve tag from collectionName.
     return this.queue = this.queue.then(async () => {
       return fs.readFile(this.path(tag), {encoding: 'utf8'})
