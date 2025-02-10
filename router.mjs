@@ -1,12 +1,7 @@
 import express from 'express';
 import { Persist } from './persist-fs.mjs';
-
 const router = express.Router();
 
-router.use(express.text({ // Define req.body, but don't use broken express.json parser that does not handle toplevel non-objects.
-  type: ['application/jose', 'application/jose+json'],
-  limit: '5mb'
-}));
 const collections = {};
 function getCollection(collectionType) {
   return (req, res, next) => {
@@ -33,9 +28,33 @@ async function invokeCollectionMethod(req, res, next) {
   return res.send(data);
 }
 
-router.get('/ImmutableCollection/:collectionName/:tag', getCollection('ImmutableCollection'), invokeCollectionMethod);
-router.get('/MutableCollection/:collectionName/:tag', getCollection('MutableCollection'), invokeCollectionMethod);
-router.get('/VersionedCollection/:collectionName/:tag', getCollection('VersionedCollection'), invokeCollectionMethod);
+const staticImmutableOptions = {
+  cacheControl: true,
+  immutable: true,
+  maxAge: '1y',
+
+  acceptRanges: false,
+  setHeaders: (res) => res.setHeader('Content-Type', 'application/jose')
+};
+const staticMutableOptions = {
+  cacheControl: true,
+  immutable: false,
+
+  acceptRanges: false,
+  setHeaders: (res) => res.setHeader('Content-Type', 'application/jose')
+};
+router.use('/ImmutableCollection', express.static('asyncLocalStorage/ImmutableCollection', staticImmutableOptions));
+router.use('/MutableCollection', express.static('asyncLocalStorage/MutableCollection', staticMutableOptions));
+router.use('/VersionedCollection', express.static('asyncLocalStorage/VersionedCollection', staticMutableOptions));
+// Here are some manual equivalents (although the following do not currently do appropriate Cache-Control).
+// router.get('/ImmutableCollection/:collectionName/:tag', getCollection('ImmutableCollection'), invokeCollectionMethod);
+// router.get('/MutableCollection/:collectionName/:tag', getCollection('MutableCollection'), invokeCollectionMethod);
+// router.get('/VersionedCollection/:collectionName/:tag', getCollection('VersionedCollection'), invokeCollectionMethod);
+
+router.use(express.text({ // Define request.body.
+  type: ['application/jose', 'application/jose+json'],
+  limit: '5mb'
+}));
 
 router.put('/ImmutableCollection/:collectionName/:tag', getCollection('ImmutableCollection'), invokeCollectionMethod);
 router.put('/MutableCollection/:collectionName/:tag', getCollection('MutableCollection'), invokeCollectionMethod);
