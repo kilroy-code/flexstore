@@ -2,11 +2,12 @@ import express from 'express';
 import { Persist } from './persist-fs.mjs';
 const router = express.Router();
 
-const collections = {};
+const collections = {ImmutableCollection: {}, MutableCollection: {}, VersionedCollection: {}};
 function getCollection(collectionType) {
   return (req, res, next) => {
     const { collectionName } = req.params;
-    req.collection = collections[collectionName] ||= new Persist({collectionName, collectionType});
+    // VersionedCollection uses the same name for the Versioned part and the Immutable part, so we must distinguish bey CollectionType.
+    req.collection = collections[collectionType][collectionName] ||= new Persist({collectionName, collectionType});
     next();
   };
 }

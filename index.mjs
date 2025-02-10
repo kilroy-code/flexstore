@@ -252,7 +252,8 @@ export class MutableCollection extends Collection {
 export class VersionedCollection extends MutableCollection {
   constructor(...rest) {
     super(...rest);
-    this.versions = new Persist({collection: this, collectionName: this.name + 'Versions'});
+    // Same name, but different type.
+    this.versions = new Persist({collectionType: 'ImmutableCollection', collectionName: this.name});
   }
   async getVersions(tag) { // Answers parsed timestamp => version dictionary IF it exists, else falsy.
     const data = await this.persist.get(tag);
@@ -263,6 +264,7 @@ export class VersionedCollection extends MutableCollection {
     if (!versions) return versions;
     return Object.keys(versions).slice(1);
   }
+  // FIXME: version map is not signed. But how are we going to get it signed in merges?
   async get(tagOrOptions) { // Get the local raw signature data.
     const isTag = typeof(tagOrOptions) === 'string';
     const tag = isTag ? tagOrOptions : tagOrOptions.tag;
@@ -303,7 +305,8 @@ export class VersionedCollection extends MutableCollection {
       tag = this.tag(tag, validation);
       const versions = this.getVersions(tag);
       if (!versions) return tag;
-      await Promise.all(Object.values(versions).slice(1).map(tag => this.versions.delete(tag)));
+      // FIXME: why are these not getting rm'd?
+      await Promise.all(Object.values(versions).slice(1).map(tag => this.versions.delete(tag, signature)));
       await this.persist.delete(tag, signature);
     }
     await this.deleteTag(tag);
