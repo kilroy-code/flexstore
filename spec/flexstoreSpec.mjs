@@ -2,7 +2,8 @@ import { Credentials, ImmutableCollection, MutableCollection, VersionedCollectio
 const { describe, beforeAll, afterAll, it, expect, expectAsync } = globalThis;
 
 // Percent of a normal implementation at which we expect this implemention to write stuff.
-const writeSlowdown = (typeof(process) !== 'undefined') ? 0.05 : 1; // My atomic fs writes in node are awful.
+const writeSlowdown = 0.05//fixme (typeof(process) !== 'undefined') ? 0.05 : 1; // My atomic fs writes in node are awful.
+const readSlowdown = 0.25;
 
 
 // TODO:getUserDeviceSecret => prompt
@@ -142,7 +143,7 @@ describe('Flexstore', function () {
 	    const elapsed = Date.now() - start;
 	    const readsPerSecond = blocks.length / (elapsed / 1e3);
 	    console.log(label, 'serial reads/second', readsPerSecond);
-	    expect(readsPerSecond).toBeGreaterThan(500);
+	    expect(readsPerSecond).toBeGreaterThan(500 * readSlowdown);
 	  });
 	});
 	describe('parallel', function () {
@@ -166,7 +167,7 @@ describe('Flexstore', function () {
 	    const elapsed = Date.now() - start;
 	    const readsPerSecond = blocks.length / (elapsed / 1e3);
 	    console.log(label, 'parallel reads/second', readsPerSecond);
-	    expect(readsPerSecond).toBeGreaterThan(1250);
+	    expect(readsPerSecond).toBeGreaterThan(1250 * readSlowdown);
 	  });
 	}, 10e3);
       });

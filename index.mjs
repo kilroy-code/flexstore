@@ -1,14 +1,15 @@
-import Credentials from "@ki1r0y/distributed-security";
+import Credentials from '@ki1r0y/distributed-security';
 export { Credentials };
 // TODO: conditional modules instead of dynamic import.
-const {Persist} = await import((typeof(process) !== 'undefined') ? "./persist-fs.mjs" : "./persist-indexeddb.mjs");
+//const {Persist} = await import((typeof(process) !== 'undefined') ? './persist-fs.mjs' : './persist-indexeddb.mjs');
+import Persist from './persist-hosted.mjs';
 const { CustomEvent, EventTarget } = globalThis;
 
-//window.Persist = Persist;
-//window.Credentials = Credentials;
+window.Persist = Persist;
+window.Credentials = Credentials;
 
 class Collection extends EventTarget {
-  constructor({name, services = [], preserveDeletions = services.length}) {
+  constructor({name, services = [], preserveDeletions = !!services.length}) {
     super();
     Object.assign(this, {name, preserveDeletions});
     this.synchronize(services);
@@ -160,7 +161,7 @@ class Collection extends EventTarget {
     if (this.preserveDeletions) { // Signature payload is empty.
       await this.persist.put(validation.tag, signature); 
     } else { // Really delete.
-      await this.persist.delete(validation.tag);
+      await this.persist.delete(validation.tag, signature);
     }
     return validation.tag; // Don't rely on the returne value of persist.delete.
   }
@@ -306,7 +307,7 @@ export class VersionedCollection extends MutableCollection {
       const versions = this.getVersions(tag);
       if (!versions) return tag;
       await Promise.all(Object.values(versions).slice(1).map(tag => this.versions.delete(tag)));
-      await this.persist.delete(tag);
+      await this.persist.delete(tag, signature);
     }
     await this.deleteTag(tag);
     return tag;
