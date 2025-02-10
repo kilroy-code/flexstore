@@ -348,13 +348,14 @@ Credentials.Storage.retrieve = async (collectionName, tag) => {
 Credentials.Storage.store = async (collectionName, tag, signature) => {
   // No need to validateForWriting, as distributed-security does that in a circularity-aware way.
   // However, we do currently need to find out of the signature has a payload.
-  // TODO: Modify dist-sec to have a separate store/delete, rather than having to await verify.
-  const verified = await Collection.verify(signature);
-  if (!verified) throw new Error(`Signature ${signature} does not verify.`);
+  // TODO: Modify dist-sec to have a separate store/delete, rather than having to figure this out here.
+  const claims = Credentials.decodeClaims(signature);
+  const emptyPayload = claims?.sub === "47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU"; // Hash of an empty string.
+
   const collection = Credentials.collections[collectionName];
   signature = Collection.ensureString(signature);
-  if (verified.payload.length) return collection.put(tag, signature);
-  return collection.delete(tag, signature);
+  if (emptyPayload) return collection.delete(tag, signature);
+  return collection.put(tag, signature);
 };
 Credentials.collections = {};
 ['EncryptionKey', 'KeyRecovery', 'Team'].forEach(name => Credentials.collections[name] = new MutableCollection({name}));
