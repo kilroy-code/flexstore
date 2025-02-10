@@ -66,6 +66,7 @@ class Collection extends EventTarget {
   fail(operation, data, author) {
     throw new Error(`${author} does not have the authority to ${operation} ${JSON.stringify(data)}.`);
   }
+  // The type of JWE that gets signed (not the cty of the JWE). We automatically try to decrypt a JWS payload of this type.
   encryptedMimeType = 'text/encrypted';
   async store(data, options = {}) {
     const {encryption, tag, ...signingOptions} = this._canonicalizeOptions(options);
@@ -201,7 +202,7 @@ class Collection extends EventTarget {
 
 	If the app cares whether the author has been kicked from the team, the app itself will have to check.
 	TODO: we should provide a tool for that.
-       */
+      */
     }
     this.dispatchEvent(new CustomEvent('update', {detail: verified}));
     return verified;
@@ -256,6 +257,7 @@ export class VersionedCollection extends MutableCollection {
     this.versions = new Persist({collectionType: 'ImmutableCollection', collectionName: this.name});
   }
   async getVersions(tag) { // Answers parsed timestamp => version dictionary IF it exists, else falsy.
+    // FIXME: version map is not signed. But how are we going to get it signed in merges?
     const data = await this.persist.get(tag);
     return Collection.maybeInflate(data); // No maybe about it, really.
   }
@@ -264,7 +266,6 @@ export class VersionedCollection extends MutableCollection {
     if (!versions) return versions;
     return Object.keys(versions).slice(1);
   }
-  // FIXME: version map is not signed. But how are we going to get it signed in merges?
   async get(tagOrOptions) { // Get the local raw signature data.
     const isTag = typeof(tagOrOptions) === 'string';
     const tag = isTag ? tagOrOptions : tagOrOptions.tag;
@@ -284,6 +285,7 @@ export class VersionedCollection extends MutableCollection {
     return this.versions.get(hash); // Will be empty if relevant timestamp doesn't exist (deleted).
   }
   async put(tag, signature) { // The signature goes to a hash version, and the tag gets updated with a new time=>hash.
+    // TODO? Maybe extend validateForWriting to include the previous timestamps?
     const validation = await this.validateForWriting(tag, signature);
     if (!validation) return undefined;
     tag = this.tag(tag, validation);
@@ -303,10 +305,10 @@ export class VersionedCollection extends MutableCollection {
     } else { // Really remove all versions and map.
       const validation = await this.validateForWriting(tag, signature);
       tag = this.tag(tag, validation);
-      const versions = this.getVersions(tag);
+      const versions = await this.getVersions(tag);
       if (!versions) return tag;
-      // FIXME: why are these not getting rm'd?
-      await Promise.all(Object.values(versions).slice(1).map(tag => this.versions.delete(tag, signature)));
+      const versionTags = Object.values(versions).slice(1);
+      await Promise.all(versionTags.map(tag => this.versions.delete(tag, signature)));
       await this.persist.delete(tag, signature);
     }
     await this.deleteTag(tag);
