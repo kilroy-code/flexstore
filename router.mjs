@@ -1,5 +1,6 @@
 import express from 'express';
 import { Persist } from './persist-fs.mjs';
+import { pathTag } from './tagPath.mjs';
 const router = express.Router();
 
 const collections = {ImmutableCollection: {}, MutableCollection: {}, VersionedCollection: {}};
@@ -12,8 +13,6 @@ function getCollection(collectionType) {
   };
 }
 
-// TODO: use express static for get (content-type!), and nocache approprirately
-// TODO: split up tags in tagPath.mjs
 // TODO: verify the writes -- but how to do this appropriately for Team/EncryptionKey/RecoveryKey?
 // TODO: on client, use local db as a cache and host as a backstore.
 
@@ -57,13 +56,13 @@ router.use(express.text({ // Define request.body.
   limit: '5mb'
 }));
 
-router.put('/ImmutableCollection/:collectionName/:tag', getCollection('ImmutableCollection'), invokeCollectionMethod);
-router.put('/MutableCollection/:collectionName/:tag', getCollection('MutableCollection'), invokeCollectionMethod);
-router.put('/VersionedCollection/:collectionName/:tag', getCollection('VersionedCollection'), invokeCollectionMethod);
+router.put('/ImmutableCollection/:collectionName/:b/:c/:a/:rest', pathTag, getCollection('ImmutableCollection'), invokeCollectionMethod);
+router.put('/MutableCollection/:collectionName/:b/:c/:a/:rest', pathTag, getCollection('MutableCollection'), invokeCollectionMethod);
+router.put('/VersionedCollection/:collectionName/:b/:c/:a/:rest', pathTag, getCollection('VersionedCollection'), invokeCollectionMethod);
 
-router.delete('/ImmutableCollection/:collectionName/:tag', getCollection('ImmutableCollection'), invokeCollectionMethod);
-router.delete('/MutableCollection/:collectionName/:tag', getCollection('MutableCollection'), invokeCollectionMethod);
-router.delete('/VersionedCollection/:collectionName/:tag', getCollection('VersionedCollection'), invokeCollectionMethod);
+router.delete('/ImmutableCollection/:collectionName/:b/:c/:a/:rest', pathTag, getCollection('ImmutableCollection'), invokeCollectionMethod);
+router.delete('/MutableCollection/:collectionName/:b/:c/:a/:rest', pathTag, getCollection('MutableCollection'), invokeCollectionMethod);
+router.delete('/VersionedCollection/:collectionName/:b/:c/:a/:rest', pathTag, getCollection('VersionedCollection'), invokeCollectionMethod);
 
 export default router;
 
