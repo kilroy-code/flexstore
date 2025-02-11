@@ -107,8 +107,7 @@ class Collection extends EventTarget {
     return Array.from(this.tags.keys());
   }
   async match(tag, properties) { // Is this signature what we are looking for?
-    const signature = await this.get(tag);
-    const verified = await Collection.verify(signature);  // OOF!
+    const verified = await this.retrieve(tag);
     const data = verified?.json;
     if (!data) return false;
     for (const key in properties) {
@@ -173,9 +172,8 @@ class Collection extends EventTarget {
     const verified = await Collection.verify(signature);
     if (!verified) return this.notifyInvalid(tag);
     tag = verified.tag = requireTag ? tag : this.tag(tag, verified);
-    const existingSignature = await this.get(tag);
-    if (existingSignature) {
-      const existingVerified = await Collection.verify(existingSignature);
+    const existingVerified = await this.retrieve(tag);
+    if (existingVerified) {
       const existing = existingVerified.protectedHeader;
       const proposed = verified.protectedHeader;
       if (proposed.iat < existing.iat) return this.notifyInvalid(tag, 'replay');
@@ -286,7 +284,6 @@ export class VersionedCollection extends MutableCollection {
     return version;
   }
   async put(tag, signature) { // The signature goes to a hash version, and the tag gets updated with a new time=>hash.
-    // TODO? Maybe extend validateForWriting to include the previous timestamps?
     const validation = await this.validateForWriting(tag, signature);
     if (!validation) return undefined;
     tag = this.tag(tag, validation);
