@@ -1,16 +1,15 @@
 import Credentials from '@ki1r0y/distributed-security';
 export { Credentials };
-// TODO: conditional modules instead of dynamic import.
-//const {Persist} = await import((typeof(process) !== 'undefined') ? './persist-fs.mjs' : './persist-indexeddb.mjs');
-import Persist from './persist-hosted.mjs';
+const {default:Persist} = await import((typeof(process) !== 'undefined') ? './persist-fs.mjs' : './persist-indexeddb.mjs');
+//import Persist from './persist-hosted.mjs';
 const { CustomEvent, EventTarget } = globalThis;
 
 class Collection extends EventTarget {
-  constructor({name, services = [], preserveDeletions = !!services.length}) {
+  constructor({name, services = [], preserveDeletions = !!services.length, persistenceClass = Persist}) {
     super();
-    Object.assign(this, {name, preserveDeletions});
+    Object.assign(this, {name, preserveDeletions, persistenceClass});
     this.synchronize(services);
-    this.persist = new Persist({collection: this});
+    this.persist = new persistenceClass({collection: this});
   }
   services =[]; // To keep different services in sync, we cannot depend on order.
 
@@ -165,7 +164,7 @@ class Collection extends EventTarget {
   }
 
   notifyInvalid(tag, message = undefined) {
-    console.warn(this.name, message || // fixme remove after development
+    console.warn(this.name, (this.debug && message) ||
 		 `Signature is not valid for ${tag || 'data'}.`);
     return undefined;
   }
@@ -233,7 +232,7 @@ class Collection extends EventTarget {
     await this.synchronizeData();
   }
   async disconnect(services = this.services.slice()) { // Shut down the specified services.
-    for (let service of services()) {
+    for (let service of services) {
       // TODO: shut it down, and remove any effected tagmap data/
       this.services.splice(this.services.indexOf(service), 1);
     }
@@ -250,11 +249,12 @@ export class MutableCollection extends Collection {
     return tag || validation.protectedHeader.sub;
   }
 }
+
 export class VersionedCollection extends MutableCollection {
   constructor(...rest) {
     super(...rest);
-    // Same name, but different type.
-    this.versions = new Persist({collectionType: 'ImmutableCollection', collectionName: this.name});
+    // Same collection name, but different type.
+    this.versions = new this.persistenceClass({collectionType: 'ImmutableCollection', collectionName: this.name});
   }
   async getVersions(tag) { // Answers parsed timestamp => version dictionary IF it exists, else falsy.
     // FIXME: version map is not signed. But how are we going to get it signed in merges?
@@ -282,7 +282,8 @@ export class VersionedCollection extends MutableCollection {
       hash = timestamps[best];
     }
     if (!hash) return '';
-    return this.versions.get(hash); // Will be empty if relevant timestamp doesn't exist (deleted).
+    const version = await this.versions.get(hash); // Will be empty if relevant timestamp doesn't exist (deleted).
+    return version;
   }
   async put(tag, signature) { // The signature goes to a hash version, and the tag gets updated with a new time=>hash.
     // TODO? Maybe extend validateForWriting to include the previous timestamps?
@@ -295,7 +296,8 @@ export class VersionedCollection extends MutableCollection {
     versions.latest = time;
     versions[time] = hash;
     await this.versions.put(hash, signature);
-    await this.persist.put(tag, Collection.ensureString(versions));
+    const timestampsData = Collection.ensureString(versions);
+    await this.persist.put(tag, timestampsData);
     await this.addTag(tag);
     return tag;
   }
@@ -360,4 +362,5 @@ Credentials.Storage.store = async (collectionName, tag, signature) => {
 Credentials.collections = {};
 ['EncryptionKey', 'KeyRecovery', 'Team'].forEach(name => Credentials.collections[name] = new MutableCollection({name}));
 
+export default {Credentials, ImmutableCollection, MutableCollection, VersionedCollection};
 Object.assign(globalThis, {Persist, Credentials, ImmutableCollection, MutableCollection, VersionedCollection}); // fixme remove

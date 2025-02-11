@@ -13,7 +13,7 @@ export async function mkdir(pathname) { // Make pathname exist, including any mi
   await fs.unlink(dummy);
 }
 
-export class Persist {
+export class PersistFileSystem {
   // Asynchronous local storage using the Node file system.
   //
   // Each promises a string (including store, or read/remove of non-existent tag).
@@ -72,4 +72,4 @@ export class Persist {
     });
   }  
 };
-export default Persist;
+export default PersistFileSystem;

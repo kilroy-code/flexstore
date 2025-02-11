@@ -1,4 +1,4 @@
-export class Persist {
+export class PersistIndexedDB {
   // Asynchronous local storage, available in web workers.
   constructor({collection, collectionType = collection.constructor.name, collectionName = collection.name, dbName = 'flexstore1'} = {}) {
     // HACK. FIXME. We reverse collectionName and dbName so that each collection is its own db.
@@ -6,7 +6,7 @@ export class Persist {
     // re-open with a new version and createObjectStore in upgradeneeded. Alas, I was not initially able
     // to do this without existing collections hanging.
     this.collectionName = dbName;
-    this.dbName = collectionName;
+    this.dbName = `${collectionType}:${collectionName}`;
 
     this.version = 1;
   }
@@ -42,4 +42,4 @@ export class Persist {
   }
 }
 
-export default Persist;
+export default PersistIndexedDB;
