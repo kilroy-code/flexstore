@@ -87,21 +87,6 @@ class Collection extends EventTarget {
     return (await this.delete(tag, await Collection.sign('', signingOptions))) ||
       this.fail('remove', tag, signingOptions.member || signingOptions.tags[0]);;
   }
-  // async retrieve(tagOrOptions) {
-  //   const {tag, decrypt = true} = tagOrOptions.tag ? tagOrOptions : {tag: tagOrOptions};
-  //   await this.synchronize1(tag);
-  //   const signature = await this.get(tag);
-  //   if (!signature) return signature;
-  //   const verified = await Collection.verify(signature);
-  //   if (decrypt && verified.protectedHeader.cty === this.encryptedMimeType) {
-  //     const decrypted = await Credentials.decrypt(verified.text);
-  //     verified.json = decrypted.json;
-  //     verified.text = decrypted.text;
-  //     verified.payload = decrypted.payload;
-  //     verified.decrypted = decrypted;
-  //   }
-  //   return verified;
-  // }
   async retrieve(tagOrOptions) { // getVerified and maybe decrypt. Has more complex behavior in subclass VersionedCollection.
     const {tag, decrypt = true} = tagOrOptions.tag ? tagOrOptions : {tag: tagOrOptions};
     const verified = await this.getVerified(tag);
@@ -311,14 +296,14 @@ export class VersionedCollection extends MutableCollection {
     return this.versions.retrieve(hash);
   }
   async store(data, options = {}) {
-    let {encryption, tag, ...signingOptions} = this._canonicalizeOptions(options);;
-    const hash = await this.versions.store(data, {encryption, ...signingOptions});
+    let {tag, ...signingOptions} = this._canonicalizeOptions(options);;
+    const hash = await this.versions.store(data, signingOptions);
     tag ||= hash;
     const versions = await this.getVersions(tag) || {};
     const time = Date.now();
     versions.latest = time;
     versions[time] = hash;
-    await this.persist.put(tag, await Collection.sign(versions, signingOptions))
+    await this.persist.put(tag, await Collection.sign(versions, signingOptions));
     await this.addTag(tag);
     return tag;
   }
