@@ -134,24 +134,27 @@ class Collection extends EventTarget {
     if (found && await this.match(found, properties)) return found;
     return null;
   }
+  requireTag(tag) {
+    if (tag) return;
+    throw new Error('A tag is required.');
+  }
 
   // These three ignore synchronization state, which if neeed is the responsibility of the caller.
-  // FIXME TODO: after initial development, these three should be made internal so that application codde
-  // does not call them.
+  // FIXME TODO: after initial development, these three should be made internal so that application code does not call them.
   get(tag) { // Get the local raw signature data.
-    if (!tag) throw new Error('No tag was supplied to get');
+    this.requireTag(tag);
     return this.persist.get(tag);
   }
   // These two can be triggered by client code or by any service.
   async put(tag, signature) { // Put the raw signature locally and on the specified services.
-    const validation = await this.validateForWriting(tag, signature);
+    const validation = await this.validateForWriting(tag, signature, 'store');
     if (!validation) return undefined;
     await this.addTag(validation.tag);
     await this.persist.put(validation.tag, signature);
     return validation.tag; // Don't rely on the returned value of persist.put.
   }
   async delete(tag, signature) { // Remove the raw signature locally and on the specified services.
-    const validation = await this.validateForWriting(tag, signature, 'requireTag');
+    const validation = await this.validateForWriting(tag, signature, 'remove', 'requireTag');
     if (!validation) return undefined;
     await this.deleteTag(tag);
     if (this.preserveDeletions) { // Signature payload is empty.
@@ -162,27 +165,28 @@ class Collection extends EventTarget {
     return validation.tag; // Don't rely on the returne value of persist.delete.
   }
 
-  notifyInvalid(tag, message = undefined) {
+  notifyInvalid(tag, operationLabel, message = undefined) {
     console.warn(this.name, (this.debug && message) ||
-		 `Signature is not valid for ${tag || 'data'}.`);
+		 `Signature is not valid to ${operationLabel} ${tag || 'data'}.`);
     return undefined;
   }
-  async validateForWriting(tag, signature, requireTag = false) {
+  async validateForWriting(tag, signature, operationLabel, requireTag = false) {
     // A deep verify that checks against the existing item's (re-)verified headers.
+    // If it succeeds, this is also the common code (between put/delete) that emits the update event.
     const verified = await Collection.verify(signature);
-    if (!verified) return this.notifyInvalid(tag);
+    if (!verified) return this.notifyInvalid(tag, operationLabel);
     tag = verified.tag = requireTag ? tag : this.tag(tag, verified);
     const existingVerified = await this.retrieve(tag);
     if (existingVerified) {
       const existing = existingVerified.protectedHeader;
       const proposed = verified.protectedHeader;
-      if (proposed.iat < existing.iat) return this.notifyInvalid(tag, 'replay');
+      if (proposed.iat < existing.iat) return this.notifyInvalid(tag, operationLabel, 'replay');
       const existingOwner = existing.iss || existing.kid;
       const proposedOwner = proposed.iss || proposed.kid;
       // Exact match. Do we need to allow for an owner to transfer ownership to a sub/super/disjoint team?
       // Currently, that would require a new record. (E.g., two Mutable/VersionedCollection items that
       // have the same GUID payload property, but different tags. I.e., a different owner means a different tag.)
-      if (!proposedOwner || (proposedOwner !== existingOwner)) return this.notifyInvalid(tag, 'not owner');
+      if (!proposedOwner || (proposedOwner !== existingOwner)) return this.notifyInvalid(tag, operationLabel, 'not owner');
       /*
 	We are not checking to see if author is currently a member of the owner team here, which
 	is called by put()/delete() in two circumstances:
@@ -252,10 +256,13 @@ export class VersionedCollection extends MutableCollection {
   constructor(...rest) {
     super(...rest);
     // Same collection name, but different type.
-    this.versions = new this.persistenceClass({collectionType: 'ImmutableCollection', collectionName: this.name});
+    const {name, persistenceClass, preserveDeletions} = this;
+    this.versions = new ImmutableCollection({name, persistenceClass, preserveDeletions});
+    this.versions.addEventListener('update', event => this.dispatchEvent(new CustomEvent('update', {detail: event.detail})));
   }
   async getVersions(tag) { // Answers parsed timestamp => version dictionary IF it exists, else falsy.
-    // FIXME: version map is not signed. But how are we going to get it signed in merges?
+    // TODO: this.get instead of this.persist.get?
+    this.requireTag(tag);
     const data = await this.persist.get(tag);
     return Collection.maybeInflate(data); // No maybe about it, really.
   }
@@ -264,51 +271,56 @@ export class VersionedCollection extends MutableCollection {
     if (!versions) return versions;
     return Object.keys(versions).slice(1);
   }
-  async get(tagOrOptions) { // Get the local raw signature data.
-    const isTag = typeof(tagOrOptions) === 'string';
-    const tag = isTag ? tagOrOptions : tagOrOptions.tag;
-    const timestamps = await this.getVersions(tag);
-    if (!timestamps) return undefined;
-    const time = (!isTag && tagOrOptions.time) || timestamps.latest;
+  getActiveHash(timestamps, time = timestamps.latest) {
+    if (!timestamps) return timestamps;
     let hash = timestamps[time];
-    if (!hash) { // We need to find the timestamp that was in force at the requested time.
-      let best = 0, times = Object.keys(timestamps);
-      for (let i = 1; i < times.length; i++) { // 0th is the key 'latest'.
-	if (times[i] <= time) best = times[i];
-	else break;
-      }
-      hash = timestamps[best];
+    if (hash) return hash;
+    // We need to find the timestamp that was in force at the requested time.
+    let best = 0, times = Object.keys(timestamps);
+    for (let i = 1; i < times.length; i++) { // 0th is the key 'latest'.
+      if (times[i] <= time) best = times[i];
+      else break;
     }
-    if (!hash) return '';
-    const version = await this.versions.get(hash); // Will be empty if relevant timestamp doesn't exist (deleted).
-    return version;
+    return timestamps[best];
   }
-  async put(tag, signature) { // The signature goes to a hash version, and the tag gets updated with a new time=>hash.
-    const validation = await this.validateForWriting(tag, signature);
-    if (!validation) return undefined;
-    tag = this.tag(tag, validation);
+  async retrieve(tagOrOptions) {
+    const {tag, time} = (!tagOrOptions || tagOrOptions.length) ? {tag: tagOrOptions} : tagOrOptions;
+
+    await this.synchronize1(tag);
+    const notYetSignature = await this.get(tag);
+    if (!notYetSignature) return notYetSignature;
+    const verifiedTimestamps = {json: Collection.maybeInflate(notYetSignature)};
+    // TODO: replace the above with super.retrieve(tag) once this.get() returns signed data.
+
+    if (!verifiedTimestamps) return '';
+    const timestamps = verifiedTimestamps.json;
+    const hash = this.getActiveHash(timestamps, time);
+    if (!hash) return '';
+    return this.versions.retrieve(hash);
+  }
+  async store(data, options = {}) {
+    let {tag, ...signingOptions} = options;
+    const hash = await this.versions.store(data, signingOptions);
+    tag ||= hash;
     const versions = await this.getVersions(tag) || {};
-    const time = validation.protectedHeader.iat;
-    const hash = validation.protectedHeader.sub;
+    const time = Date.now();
     versions.latest = time;
     versions[time] = hash;
-    await this.versions.put(hash, signature);
     const timestampsData = Collection.ensureString(versions);
-    await this.persist.put(tag, timestampsData);
+    await this.persist.put(tag, timestampsData); // todo: sign
     await this.addTag(tag);
     return tag;
   }
-  async delete(tag, signature) { // Remove the raw signature locally and on the specified services.
-    if (this.preserveDeletions) {
-      tag = await this.put(tag, signature); // Create a timestamp => version with an empty payload.
-    } else { // Really remove all versions and map.
-      const validation = await this.validateForWriting(tag, signature);
-      tag = this.tag(tag, validation);
-      const versions = await this.getVersions(tag);
-      if (!versions) return tag;
+  async remove(options = {}) { // Note: Really just replacing with empty data forever. Otherwise merging with earlier data will bring it back!
+    const tag = options.tag;
+    const versions = await this.getVersions(tag);
+    if (this.preserveDeletions) { // Create a timestamp => version with an empty payload.
+      await this.store('', options);
+    } else {
       const versionTags = Object.values(versions).slice(1);
-      await Promise.all(versionTags.map(tag => this.versions.delete(tag, signature)));
-      await this.persist.delete(tag, signature);
+      options = this._canonicalizeOptions(options);
+      await Promise.all(versionTags.map(tag => this.versions.remove({tag, ...options})));
+      await this.persist.delete(tag, await Collection.sign('', options));
     }
     await this.deleteTag(tag);
     return tag;
