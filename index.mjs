@@ -1,7 +1,7 @@
 import Credentials from '@ki1r0y/distributed-security';
 export { Credentials };
-//const {default:Persist} = await import((typeof(process) !== 'undefined') ? './persist-fs.mjs' : './persist-indexeddb.mjs');
-import Persist from './persist-hosted.mjs';
+const {default:Persist} = await import((typeof(process) !== 'undefined') ? './persist-fs.mjs' : './persist-indexeddb.mjs');
+//import Persist from './persist-hosted.mjs';
 const { CustomEvent, EventTarget } = globalThis;
 
 class Collection extends EventTarget {
@@ -87,13 +87,26 @@ class Collection extends EventTarget {
     return (await this.delete(tag, await Collection.sign('', signingOptions))) ||
       this.fail('remove', tag, signingOptions.member || signingOptions.tags[0]);;
   }
-  async retrieve(tagOrOptions) {
+  // async retrieve(tagOrOptions) {
+  //   const {tag, decrypt = true} = tagOrOptions.tag ? tagOrOptions : {tag: tagOrOptions};
+  //   await this.synchronize1(tag);
+  //   const signature = await this.get(tag);
+  //   if (!signature) return signature;
+  //   const verified = await Collection.verify(signature);
+  //   if (decrypt && verified.protectedHeader.cty === this.encryptedMimeType) {
+  //     const decrypted = await Credentials.decrypt(verified.text);
+  //     verified.json = decrypted.json;
+  //     verified.text = decrypted.text;
+  //     verified.payload = decrypted.payload;
+  //     verified.decrypted = decrypted;
+  //   }
+  //   return verified;
+  // }
+  async retrieve(tagOrOptions) { // getVerified and maybe decrypt. Has more complex behavior in subclass VersionedCollection.
     const {tag, decrypt = true} = tagOrOptions.tag ? tagOrOptions : {tag: tagOrOptions};
-    await this.synchronize1(tag);
-    const signature = await this.get(tag);
-    if (!signature) return signature;
-    const verified = await Collection.verify(signature);
-    if (decrypt && verified.protectedHeader.cty === this.encryptedMimeType) {
+    const verified = await this.getVerified(tag);
+    if (!verified) return verified;
+    if (decrypt && (verified.protectedHeader.cty === this.encryptedMimeType)) {
       const decrypted = await Credentials.decrypt(verified.text);
       verified.json = decrypted.json;
       verified.text = decrypted.text;
@@ -101,6 +114,12 @@ class Collection extends EventTarget {
       verified.decrypted = decrypted;
     }
     return verified;
+  }
+  async getVerified(tag) { // synchronize, get, and verify (but without decrypt)
+    await this.synchronize1(tag);
+    const signature = await this.get(tag);
+    if (!signature) return signature;
+    return Collection.verify(signature);
   }
   async list(skipSync = false ) { // List all tags of this collection.
     if (!skipSync) await this.synchronizeTags();
@@ -177,7 +196,7 @@ class Collection extends EventTarget {
     const verified = await Collection.verify(signature);
     if (!verified) return this.notifyInvalid(tag, operationLabel);
     tag = verified.tag = requireTag ? tag : this.tag(tag, verified);
-    const existingVerified = await this.retrieve({tag, decrypt: false});
+    const existingVerified = await this.getVerified(tag);
     if (existingVerified) {
       const existing = existingVerified.protectedHeader;
       const proposed = verified.protectedHeader;
@@ -263,11 +282,8 @@ export class VersionedCollection extends MutableCollection {
   }
   async getVersions(tag) { // Answers parsed timestamp => version dictionary IF it exists, else falsy.
     this.requireTag(tag);
-    await this.synchronize1(tag);
-    const data = await this.get(tag);
-    if (!data) return data;
-    const verified = await Collection.verify(data);
-    return verified.json;
+    const verified = await this.getVerified(tag);
+    return verified?.json;
   }
   async retrieveTimestamps(tag) {
     const versions = await this.getVersions(tag);
@@ -295,27 +311,27 @@ export class VersionedCollection extends MutableCollection {
     return this.versions.retrieve(hash);
   }
   async store(data, options = {}) {
-    let {tag, ...signingOptions} = this._canonicalizeOptions(options);;
-    const hash = await this.versions.store(data, signingOptions);
+    let {encryption, tag, ...signingOptions} = this._canonicalizeOptions(options);;
+    const hash = await this.versions.store(data, {encryption, ...signingOptions});
     tag ||= hash;
     const versions = await this.getVersions(tag) || {};
     const time = Date.now();
     versions.latest = time;
     versions[time] = hash;
-    await this.persist.put(tag, await Collection.sign(versions, signingOptions));
+    await this.persist.put(tag, await Collection.sign(versions, signingOptions))
     await this.addTag(tag);
     return tag;
   }
   async remove(options = {}) { // Note: Really just replacing with empty data forever. Otherwise merging with earlier data will bring it back!
-    const tag = options.tag;
+    let {encryption, tag, ...signingOptions} = this._canonicalizeOptions(options); // Ignore encryption
     const versions = await this.getVersions(tag);
+    if (!versions) return versions;
     if (this.preserveDeletions) { // Create a timestamp => version with an empty payload.
-      await this.store('', options);
+      await this.store('', signingOptions);
     } else {
       const versionTags = Object.values(versions).slice(1);
-      options = this._canonicalizeOptions(options);
-      await Promise.all(versionTags.map(tag => this.versions.remove({tag, ...options})));
-      await this.persist.delete(tag, await Collection.sign('', options));
+      await Promise.all(versionTags.map(tag => this.versions.remove({tag, ...signingOptions})));
+      await this.persist.delete(tag, await Collection.sign('', signingOptions));
     }
     await this.deleteTag(tag);
     return tag;
@@ -351,12 +367,13 @@ Credentials.Storage.retrieve = async (collectionName, tag) => {
   // However, since we have bypassed Collection.retrieve, we maybeInflate here.
   return Collection.maybeInflate(data);
 }
+const EMPTY_STRING_HASH = "47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU"; // Hash of an empty string.
 Credentials.Storage.store = async (collectionName, tag, signature) => {
   // No need to validateForWriting, as distributed-security does that in a circularity-aware way.
   // However, we do currently need to find out of the signature has a payload.
   // TODO: Modify dist-sec to have a separate store/delete, rather than having to figure this out here.
   const claims = Credentials.decodeClaims(signature);
-  const emptyPayload = claims?.sub === "47DEQpj8HBSa-_TImW-5JCeuQeRkm5NMpJWZG3hSuFU"; // Hash of an empty string.
+  const emptyPayload = claims?.sub === EMPTY_STRING_HASH;
 
   const collection = Credentials.collections[collectionName];
   signature = Collection.ensureString(signature);
