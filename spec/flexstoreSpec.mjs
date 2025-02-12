@@ -63,9 +63,7 @@ describe('Flexstore', function () {
 	expect(typeof tag).toBe('string');
       });
       it('cannot be written by a different user (even with the same data).', async function () {
-	collection.debug = true;
 	await expectAsync(collection.store(data, {tag, author: randomUser})).toBeRejected();
-	collection.debug = false;
       });
       it('retrieves.', async function () {
 	const signature = await collection.retrieve(tag);

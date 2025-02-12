@@ -53,12 +53,13 @@ class Collection extends EventTarget {
   }
   _canonicalizeOptions({owner:team = Credentials.owner, author:member = Credentials.author,
 			tag,
-			encryption = Credentials.encryption} = {}) {
+			encryption = Credentials.encryption,
+			...rest} = {}) {
     // TODO: support simplified syntax, too, per README
     // TODO: should we specify subject: tag for both mutables? (gives hash)
     const options = (team && team !== member) ?
-	  {team, member, tag, encryption} :
-	  {tags: [member], tag, time: Date.now(), encryption}; // No iat if time not explicitly given.
+	  {team, member, tag, encryption, ...rest} :
+	  {tags: [member], tag, time: Date.now(), encryption, ...rest}; // No iat if time not explicitly given.
     if ([true, 'team', 'owner'].includes(options.encryption)) options.encryption = team;
     return options;
   }
@@ -103,7 +104,6 @@ class Collection extends EventTarget {
   async list(skipSync = false ) { // List all tags of this collection.
     if (!skipSync) await this.synchronizeTags();
     // We cannot just list the keys of the collection, because that includes empty payloads of items that have been deleted.
-    this.log('tags', this.tags);
     return Array.from(this.tags.keys());
   }
   async match(tag, properties) { // Is this signature what we are looking for?
@@ -261,10 +261,12 @@ export class VersionedCollection extends MutableCollection {
     this.versions.addEventListener('update', event => this.dispatchEvent(new CustomEvent('update', {detail: event.detail})));
   }
   async getVersions(tag) { // Answers parsed timestamp => version dictionary IF it exists, else falsy.
-    // TODO: this.get instead of this.persist.get?
     this.requireTag(tag);
-    const data = await this.persist.get(tag);
-    return Collection.maybeInflate(data); // No maybe about it, really.
+    await this.synchronize1(tag);
+    const data = await this.get(tag);
+    if (!data) return data;
+    const verified = await Collection.verify(data);
+    return verified.json;
   }
   async retrieveTimestamps(tag) {
     const versions = await this.getVersions(tag);
@@ -285,29 +287,21 @@ export class VersionedCollection extends MutableCollection {
   }
   async retrieve(tagOrOptions) {
     const {tag, time} = (!tagOrOptions || tagOrOptions.length) ? {tag: tagOrOptions} : tagOrOptions;
-
-    await this.synchronize1(tag);
-    const notYetSignature = await this.get(tag);
-    if (!notYetSignature) return notYetSignature;
-    const verifiedTimestamps = {json: Collection.maybeInflate(notYetSignature)};
-    // TODO: replace the above with super.retrieve(tag) once this.get() returns signed data.
-
-    if (!verifiedTimestamps) return '';
-    const timestamps = verifiedTimestamps.json;
+    const timestamps = await this.getVersions(tag);
+    if (!timestamps) return timestamps;
     const hash = this.getActiveHash(timestamps, time);
     if (!hash) return '';
     return this.versions.retrieve(hash);
   }
   async store(data, options = {}) {
-    let {tag, ...signingOptions} = options;
+    let {tag, ...signingOptions} = this._canonicalizeOptions(options);;
     const hash = await this.versions.store(data, signingOptions);
     tag ||= hash;
     const versions = await this.getVersions(tag) || {};
     const time = Date.now();
     versions.latest = time;
     versions[time] = hash;
-    const timestampsData = Collection.ensureString(versions);
-    await this.persist.put(tag, timestampsData); // todo: sign
+    await this.persist.put(tag, await Collection.sign(versions, signingOptions));
     await this.addTag(tag);
     return tag;
   }
