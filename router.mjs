@@ -1,17 +1,29 @@
 import express from 'express';
-import { Persist } from './persist-fs.mjs';
+import Persist from './persist-fs.mjs';
+import Flex from './index.mjs';
 import { pathTag } from './tagPath.mjs';
 const router = express.Router();
 
-const collections = {ImmutableCollection: {}, MutableCollection: {}, VersionedCollection: {}};
-function getCollection(collectionType) {
+const collections = { ImmutableCollection: {}, MutableCollection: {}, VersionedCollection: {}};
+function ensureCollection(collectionType, collectionName) {
+  // VersionedCollection uses the same name for the Versioned part and the Immutable part, so we must distinguish bey CollectionType.
+  return collections[collectionType][collectionName] ||=
+    new Flex[collectionType]({name: collectionName, persistenceClass: Persist});
+}
+function getCollection(collectionType) { // Midleware that leaves collection in req.collection.
   return (req, res, next) => {
     const { collectionName } = req.params;
-    // VersionedCollection uses the same name for the Versioned part and the Immutable part, so we must distinguish bey CollectionType.
-    req.collection = collections[collectionType][collectionName] ||= new Persist({collectionName, collectionType});
+    req.collection = ensureCollection(collectionType, collectionName);
     next();
   };
 }
+// Feels circular, but it isn't. The collections will validate PUT/DELETE request signatures, using
+// the same collections that distributed-security clients expect in our Flex.Credentials.
+// Here we override the usual definitions to make them match what clients get.
+['EncryptionKey', 'KeyRecovery', 'Team'].forEach(name => {
+  Flex.Credentials.collections[name].disconnect(); // Don't await.
+  Flex.Credentials.collections[name] = ensureCollection('MutableCollection', name);
+});
 
 // TODO: verify the writes -- but how to do this appropriately for Team/EncryptionKey/RecoveryKey?
 // TODO: on client, use local db as a cache and host as a backstore.
@@ -21,7 +33,13 @@ async function invokeCollectionMethod(req, res, next) {
   const {collection, method, params, body} = req;
   const {tag} = params;
   const operation = methodMap[method];
-  const data = await collection[operation](tag, body);
+  let data = '';
+  try {
+    data = await collection[operation](tag, body);
+  } catch (error) {
+    console.warn(error);
+    return res.sendStatus(403);
+  }
   if (method !== 'GET') return res.send(tag); // oddly, body is not falsy, but an empty object ({}).
   if (!data) return res.sendStatus(404);
   res.set('Content-Type', data.startsWith("{") ? 'application/jose+json' : 'application/jose');

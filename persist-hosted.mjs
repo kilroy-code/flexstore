@@ -10,28 +10,26 @@ export class PersistHosted {
     return tagPath(this.base, tag, '');
   }
   fail(tag, response) {
-    // console.warn(this.collectionName, tag, response.statusText); // Browse reports this.
+    //console.warn(this.collectionName, tag, response.statusText); // Browse reports this.
     return '';
   }
   async request(tag, method = 'GET', body = '') { // Promise a response from host (specifed by dbName).
+    const path = this.path(tag);
     const options = body ?
 	  {method, body, headers: {"Content-Type": body.startsWith("{") ? "application/jose+json" : "application/jose"}} :
-	  {headers: {"Accept": "application/jose"}};
-    const response = await fetch(this.path(tag), options);
+	  {/*cache: 'reload',/*fixme*/ headers: {"Accept": "application/jose"}};
+    const response = await fetch(path, options);
     if (!response.ok) return this.fail(tag, response);
-    return response;
+    return response.text();
   }
   async get(tag) { // Promise to retrieve tag from collectionName.
-    const response = await  this.request(tag);
-    return response && response.text();
+    return this.request(tag);
   }
   async put(tag, data) { // Promise to store data at tag in collectionName.
-    await this.request(tag, 'PUT', data);
-    return tag;
+    return this.request(tag, 'PUT', data);
   }
   async delete(tag, data) { // Promise to store data at tag in collectionName.
-    await this.request(tag, 'DELETE', data);
-    return tag;
+    return this.request(tag, 'DELETE', data);
   }
 };
 export default PersistHosted;

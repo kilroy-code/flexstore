@@ -1,7 +1,7 @@
 import Credentials from '@ki1r0y/distributed-security';
 export { Credentials };
-const {default:Persist} = await import((typeof(process) !== 'undefined') ? './persist-fs.mjs' : './persist-indexeddb.mjs');
-//import Persist from './persist-hosted.mjs';
+//const {default:Persist} = await import((typeof(process) !== 'undefined') ? './persist-fs.mjs' : './persist-indexeddb.mjs');
+import Persist from './persist-hosted.mjs';
 const { CustomEvent, EventTarget } = globalThis;
 
 class Collection extends EventTarget {

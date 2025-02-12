@@ -294,7 +294,7 @@ constructor()
 
 store()
 
-retrieve() - Also encrypts the data if needed, but only if any authorized `owner` in this browser is recursively a membership of the `owner` group specified by the operative `store()`.
+retrieve() - _Also encrypts the data if needed, but only if any authorized `owner` in this browser is recursively a membership of the `owner` group specified by the operative `store()`. Option decrypt:false, too._
 
 remove()
 

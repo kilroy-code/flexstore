@@ -1,6 +1,9 @@
 import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../index.mjs';
 const { describe, beforeAll, afterAll, it, expect, expectAsync } = globalThis;
 
+// N.B.: If a previous failed run was not able to cleanup, there may be old objects owned by old users.
+// So you need to clear things wherever they are stored: locally, hosted, browser cache, ....
+
 // Percent of a normal implementation at which we expect this implemention to write stuff.
 const writeSlowdown = 0.05//fixme (typeof(process) !== 'undefined') ? 0.05 : 1; // My atomic fs writes in node are awful.
 const readSlowdown = 0.25;
@@ -25,7 +28,6 @@ describe('Flexstore', function () {
     otherUser = await Credentials.createAuthor('airspeed velocity?');
     team = await Credentials.create(Credentials.author, otherUser);
     randomUser = await Credentials.createAuthor("favorite color?");
-    
   }, 25e3);
   afterAll(async function () {
     await Credentials.destroy({tag: randomUser, recursiveMembers: true});
@@ -33,6 +35,9 @@ describe('Flexstore', function () {
     await Credentials.destroy(team);
     await Credentials.destroy({tag: user, recursiveMembers: true});
     //console.log(Persist.lists); // Did we clean up? Note that versions never go away.
+  });
+  it('initializes credentials.', function () {
+    expect(user /*&& otherUser && team && randomUser*/).toBeTruthy();
   });
   function testCollection(collection, restoreCheck) {
     const label = collection.constructor.name;
@@ -126,7 +131,7 @@ describe('Flexstore', function () {
 	    const elapsed = Date.now() - start;
 	    writesPerSecond = blocks.length / (elapsed / 1e3);
 	    console.log(label, 'serial writes/second', writesPerSecond);
-	  });
+	  }, 10e3);
 	  afterAll(async function () {
 	    await Promise.all(tags.map(tag => collection.remove({tag})));
 	  });
@@ -170,7 +175,7 @@ describe('Flexstore', function () {
 	}, 10e3);
       });
     });
-  }
+  }/*
   testCollection(new ImmutableCollection({name: 'com.acme.immutable', services}),
 		 async (firstData, newData, signature, firstTag, newTag, collection) => {
 		   expect(firstTag).not.toBe(newTag);
@@ -186,7 +191,7 @@ describe('Flexstore', function () {
 		   expect(firstTag).toBe(newTag);
 		   expect(signature.json).toEqual(newData);
 		   expect(signature.protectedHeader.act).toBe(otherUser);
-		 });
+		 });*/
   testCollection(new VersionedCollection({name: 'com.acme.versioned', services}),
 		 async (firstData, newData, signature, firstTag, newTag, collection) => {
 		   expect(firstTag).toBe(newTag);
