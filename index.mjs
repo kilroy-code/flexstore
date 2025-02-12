@@ -1,7 +1,7 @@
 import Credentials from '@ki1r0y/distributed-security';
 export { Credentials };
-const {default:Persist} = await import((typeof(process) !== 'undefined') ? './persist-fs.mjs' : './persist-indexeddb.mjs');
-//import Persist from './persist-hosted.mjs';
+//const {default:Persist} = await import((typeof(process) !== 'undefined') ? './persist-fs.mjs' : './persist-indexeddb.mjs');
+import Persist from './persist-hosted.mjs';
 const { CustomEvent, EventTarget } = globalThis;
 
 class Collection extends EventTarget {
@@ -87,12 +87,13 @@ class Collection extends EventTarget {
     return (await this.delete(tag, await Collection.sign('', signingOptions))) ||
       this.fail('remove', tag, signingOptions.member || signingOptions.tags[0]);;
   }
-  async retrieve(tag) {
+  async retrieve(tagOrOptions) {
+    const {tag, decrypt = true} = tagOrOptions.tag ? tagOrOptions : {tag: tagOrOptions};
     await this.synchronize1(tag);
     const signature = await this.get(tag);
     if (!signature) return signature;
     const verified = await Collection.verify(signature);
-    if (verified.protectedHeader.cty === this.encryptedMimeType) {
+    if (decrypt && verified.protectedHeader.cty === this.encryptedMimeType) {
       const decrypted = await Credentials.decrypt(verified.text);
       verified.json = decrypted.json;
       verified.text = decrypted.text;
@@ -176,7 +177,7 @@ class Collection extends EventTarget {
     const verified = await Collection.verify(signature);
     if (!verified) return this.notifyInvalid(tag, operationLabel);
     tag = verified.tag = requireTag ? tag : this.tag(tag, verified);
-    const existingVerified = await this.retrieve(tag);
+    const existingVerified = await this.retrieve({tag, decrypt: false});
     if (existingVerified) {
       const existing = existingVerified.protectedHeader;
       const proposed = verified.protectedHeader;
