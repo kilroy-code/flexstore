@@ -2,16 +2,16 @@
 
 Flexstore lets you easily and safely set up a key-value JSON collection in an app, which _also_ lets you work offline, federate the storage across relay servers, and even p2p between browser clients:
 
-1. Each collection can be independently and dynamically connected to any number of peer clients or relay servers. While connected, all changes are automatically shared in realtime (even as full duplication of the collection continues in the background).
+1. Each collection can be independently and dynamically connected to any number of peer clients or relay servers. While connected, all changes are automatically shared in realtime (even as full replication of the collection continues in the background).
 2. Each collection can later be synchronized with any number of peer clients or relay servers, with the collection automatically merged and reconciled.
 
-It is a very simple (and efficient and secure!) way to have shared, authenticated, live data in an app that works online or offline:
+It is a very simple (and secure!) way to have shared, authenticated, live data in an app that works online or offline:
 
 - Everything is signed so that wherever the data is stored, you can be sure who saved it and that it has not since been modified.
 - Data is optionally encrypted, so that it can  be read only by the intended audience.
 - The cryptographic keys are safely stored in the system itself (signed and encrypted) so that they are available from the cloud to your users' devices. The keys are user-managed, and there are no custodial copies -- i.e., even you do not have access.
 
-This package works in browsers and in NodeJS. However, the documented, standard-based protocol can be implemented in any implementation that supports the underlying [JWS](https://datatracker.ietf.org/doc/html/rfc7515) and [JWE](https://www.rfc-editor.org/rfc/rfc7516), and web transports. (The current version supports HTTPS REST and peer/realtime push through [WRTC](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API) [data channels](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Using_data_channels). Future implementations are likely to also support websockets for realtime push, and allow automatic archiving of older data that gets pulled in from a relay server on-demand.)
+This package works in browsers and in NodeJS. However, the documented, standards-based protocol can be implemented in any implementation that supports the underlying [JWS](https://datatracker.ietf.org/doc/html/rfc7515) and [JWE](https://www.rfc-editor.org/rfc/rfc7516), and web transports. (The current version supports HTTPS REST, and peer/realtime push through [WRTC](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API) [data channels](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Using_data_channels). Future implementations are likely to also support websockets for realtime push, and allow automatic archiving of older data that gets pulled in from a relay server on-demand.)
 
 ## Installation
 
