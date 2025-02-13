@@ -1,6 +1,6 @@
 import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../index.mjs';
 import { PromiseWebRTC } from '../webrtc.mjs';
-const { describe, beforeAll, afterAll, it, expect, expectAsync } = globalThis;
+const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalThis;
 
 // N.B.: If a previous failed run was not able to cleanup, there may be old objects owned by old users.
 // So you need to clear things wherever they are stored: locally, hosted, browser cache, ....
@@ -20,22 +20,28 @@ Credentials.getUserDeviceSecret  = function (tag, promptString) { // Used when f
 
 describe('data channel', function () {
   it('smokes', async function () {
-    const tag = 'here';
-    const webRTC = new PromiseWebRTC({label: tag});
-    const dataChannelPromise = webRTC.createDataChannel();
-    const outboundSignals = await webRTC.signals;
+    const tag = 'testing';
+    const message = 'echo';
+
+    const url = new URL(`/flexstore/requestDataChannel/${tag}`, baseURL);
+    const connection = new PromiseWebRTC({label: tag});
+    const dataChannelPromise = connection.createDataChannel();
+    // Send them our signals:
+    const outboundSignals = await connection.signals;
     const body = JSON.stringify(outboundSignals);
-    console.log({tag, webRTC, dataChannelPromise, outboundSignals});
-    console.log(body);
-    const request = await fetch(new URL(`/flexstore/requestDataChannel/${tag}`, baseURL), {method: 'POST', body});
+    const request = await fetch(url, {method: 'POST', body});
     const response = await request.text();
-    webRTC.signals = JSON.parse(response);
+    // And accept their response:
+    connection.signals = JSON.parse(response);
+
+    // When the channel opens, send a message and expect the echo.
     const dataChannel = await dataChannelPromise;
-    let message = 'echo';
     dataChannel.send(message);
-    expect(await new Promise(resolve => {
+    const echo = await new Promise(resolve => {
       dataChannel.onmessage = event => resolve(event.data);
-    })).toBe(message);
+    });
+    expect(echo).toBe(message);
+    dataChannel.close();
   });
 });
 

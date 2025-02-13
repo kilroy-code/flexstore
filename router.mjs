@@ -94,15 +94,15 @@ const dataChannels = {};
 router.post('/requestDataChannel/:tag', async (req, res, next) => {
   const {params, body} = req;
   const tag = params.tag;
-  console.log({tag, type: typeof(body), body, headers: req.headers});
   const signals = JSON.parse(body);
   const connection = dataChannels[tag] = new PromiseWebRTC({label: tag});
-  const dataPromise = new Promise(resolve => { // Resolves to an open data channel.
-    connection.peer.ondatachannel = event => resolve(event.channel);
-  });
-  console.log({tag, body, signals, connection, dataPromise});
+  const dataPromise = connection.getDataChannelPromise();
   dataPromise.then(dataChannel => {
-    console.log('got data channel', dataChannel);
+    dataChannel.onclose = () => {
+      connection.close();
+      delete dataChannels[tag];
+      console.log('Closed', tag);
+    };
     dataChannel.onmessage = event => dataChannel.send(event.data); // Just echo what we are given.
   });
   connection.signals = signals; // Convey the posted offer+ice signals to our connection.

@@ -4,9 +4,10 @@ const {default:wrtc} = await ((typeof(process) !== 'undefined') ? import('wrtc')
 // Currently supports data, via createDataChannel().
 // When something triggers negotiation (such as the above method), it will generate calls to signal(), which needs to be defined by subclasses.
 export class WebRTC {
-  constructor({label = '', rtcConfiguration = {}} = {}) {
+  constructor({label = '', rtcConfiguration = {}} = {}, debug = false) {
     this.label = label;
     this.configuration = rtcConfiguration;
+    this.debug = debug;
     this.resetPeer();
   }
   signal(type, message) { // Subclasses must override or extend. Default just logs.
@@ -75,7 +76,7 @@ export class WebRTC {
     this.peer.addIceCandidate(iceCandidate).catch(error => this.icecandidateError(error));
   }
   log(...rest) {
-    console.log(this.label, ...rest);
+    if (this.debug) console.log(this.label, ...rest);
   }
   logError(label, eventOrException) {
     const data = [this.label, ...this.constructor.gatherErrorData(label, eventOrException)];
@@ -136,5 +137,10 @@ export class PromiseWebRTC extends WebRTC {
   signal(type, message) {
     super.signal(type, message);
     this.sending.push([type, message]);
+  }
+  getDataChannelPromise() {
+    return new Promise(resolve => { // Resolves to an open data channel.
+      this.peer.ondatachannel = event => resolve(event.channel);
+    });
   }
 }
