@@ -5,6 +5,8 @@ Flexstore lets you easily and safely set up a key-value JSON collection in an ap
 1. Each collection can be independently and dynamically connected to any number of peer clients or relay servers. While connected, all changes are automatically shared in realtime (even as full replication of the collection continues in the background).
 2. Each collection can later be synchronized with any number of peer clients or relay servers, with the collection automatically merged and reconciled.
 
+The relays (whether servers or clients) do not need to cooperate with or know anything about your app.
+
 It is a very simple (and secure!) way to have shared, authenticated, live data in an app that works online or offline:
 
 - Everything is signed so that wherever the data is stored, you can be sure who saved it and that it has not since been modified.
