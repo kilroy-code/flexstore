@@ -1,12 +1,17 @@
 # Flexstore
 
-Flexstore lets you easily and safely set up a key-value JSON store in a browser or NodeJS app, which _also_ lets you work offline, federate the storage across relay servers, and even p2p between browser clients. All changes are automatically shared in realtime, and an 'update' event can be listened for.
+Flexstore lets you easily and safely set up a key-value JSON collection in an app, which _also_ lets you work offline, federate the storage across relay servers, and even p2p between browser clients:
 
-It is a very simple (and efficient and secure!) way to have shared, authenticated, live data in an app that works online or offline.
+1. Each collection can be independently and dynamically connected to any number of peer clients or relay servers. While connected, all changes are automatically shared in realtime (even as full duplication of the collection continues in the background).
+2. Each collection can later be synchronized with any number of peer clients or relay servers, with the collection automatically merged and reconciled.
+
+It is a very simple (and efficient and secure!) way to have shared, authenticated, live data in an app that works online or offline:
 
 - Everything is signed so that wherever the data is stored, you can be sure who saved it and that it has not since been modified.
 - Data is optionally encrypted, so that it can  be read only by the intended audience.
 - The keys are safely stored in the system itself (signed and encrypted) so that they are available from the cloud to your users' devices. The keys are user-managed, and there are no custodial copies -- i.e., even you do not have access.
+
+This package works in browsers and in NodeJS. However, the documented, standard-based protocol can be implemented in any implementation that supports the underlying JWS and JWE, and web transports. (The current version supoorts https REST and peer/realtime push through wrtc data channels. Future implementations are likely to allow websockets for realtime push. Future versions are also likely to allow automatic archiving of older data that gets pulled in from a relay server on-demand.)
 
 ## Installation
 
@@ -52,7 +57,7 @@ Collections can be as specialized as the app needs them to be. E.g., instead of 
 
 ### Dynamic Sync:
 
-Apps do not have to stay synchronized. One can also just exachange data, which in this case is another client peer:
+Apps do not have to stay synchronized. One can also just exchange data, which in this case is another client peer:
 
 ```
 const peerSession = "some agreed upon name that does not start with http, /, or ./";
@@ -170,7 +175,7 @@ An application can allow (or require) a user to encrypt data within a collection
 
 All collections start synchronizing their listed services at construction, and will stay connected until `disconnect()`. (Of source, the services list can be empty.) Services can later be added explicitly with the `synchronize()` method.
 
-While we are connected, any `store()` or `remove()` calls on either system are forwarded to the other. (These internally forwarded calls are not transitively forwarded to anyone else.) Both systems emit an `update` event on the collection, specifying the `tag` and the new `signature` object as properties of the event. An update is also emmitted for anything added during synchronization. It is possible to receive multiple update events on the same tag, in an order that is different what would be produced by synchronization. In this case, an additional update event is emitted with the "better" signature.
+While we are connected, any `store()` or `remove()` calls on either system are forwarded to the other. (These internally forwarded calls are not transitively forwarded to anyone else.) Both systems emit an `update` event on the collection, specifying the `tag` and the new `signature` object as properties of the event. An update is also emmitted for anything added during synchronization. It is possible to receive multiple update events on the same tag, in an order that is different from what would be produced by synchronization. In this case, an additional update event is emitted with the "better" signature.
 
 A `retrieve()` will produce the current signature per the collections synchronization algorithm (even if the systems have not yet finished synhcronization).
 
