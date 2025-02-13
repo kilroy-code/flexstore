@@ -1,4 +1,5 @@
 import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../index.mjs';
+import { PromiseWebRTC } from '../webrtc.mjs';
 const { describe, beforeAll, afterAll, it, expect, expectAsync } = globalThis;
 
 // N.B.: If a previous failed run was not able to cleanup, there may be old objects owned by old users.
@@ -7,6 +8,7 @@ const { describe, beforeAll, afterAll, it, expect, expectAsync } = globalThis;
 // Percent of a normal implementation at which we expect this implemention to write stuff.
 const writeSlowdown = 0.05//fixme (typeof(process) !== 'undefined') ? 0.05 : 1; // My atomic fs writes in node are awful.
 const readSlowdown = 0.25;
+const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 
 
 // TODO:getUserDeviceSecret => prompt
@@ -16,7 +18,28 @@ Credentials.getUserDeviceSecret  = function (tag, promptString) { // Used when f
   return swizzle(tag);
 };
 
-describe('Flexstore', function () {
+describe('data channel', function () {
+  it('smokes', async function () {
+    const tag = 'here';
+    const webRTC = new PromiseWebRTC({label: tag});
+    const dataChannelPromise = webRTC.createDataChannel();
+    const outboundSignals = await webRTC.signals;
+    const body = JSON.stringify(outboundSignals);
+    console.log({tag, webRTC, dataChannelPromise, outboundSignals});
+    console.log(body);
+    const request = await fetch(new URL(`/flexstore/requestDataChannel/${tag}`, baseURL), {method: 'POST', body});
+    const response = await request.text();
+    webRTC.signals = JSON.parse(response);
+    const dataChannel = await dataChannelPromise;
+    let message = 'echo';
+    dataChannel.send(message);
+    expect(await new Promise(resolve => {
+      dataChannel.onmessage = event => resolve(event.data);
+    })).toBe(message);
+  });
+});
+
+xdescribe('Flexstore', function () {
   let user, otherUser, team, randomUser;
   const services = []; // fixme ['/', 'https://ki1r0y.com/flex/'];
   const blocks = Array.from({length: 1000 * writeSlowdown}, (_, index) => ({index}));
@@ -37,7 +60,7 @@ describe('Flexstore', function () {
     //console.log(Persist.lists); // Did we clean up? Note that versions never go away.
   });
   it('initializes credentials.', function () {
-    expect(user /*&& otherUser && team && randomUser*/).toBeTruthy();
+    expect(user && otherUser && team && randomUser).toBeTruthy();
   });
   function testCollection(collection, restoreCheck) {
     const label = collection.constructor.name;

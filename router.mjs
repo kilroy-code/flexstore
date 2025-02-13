@@ -2,6 +2,7 @@ import express from 'express';
 import Persist from './persist-fs.mjs';
 import Flex from './index.mjs';
 import { pathTag } from './tagPath.mjs';
+import { PromiseWebRTC } from './webrtc.mjs';
 const router = express.Router();
 
 const collections = { ImmutableCollection: {}, MutableCollection: {}, VersionedCollection: {}};
@@ -46,20 +47,23 @@ async function invokeCollectionMethod(req, res, next) {
   return res.send(data);
 }
 
+function setHeaders(res) {
+  res.setHeader('Content-Type', 'application/jose');
+}
 const staticImmutableOptions = {
   cacheControl: true,
   immutable: true,
   maxAge: '1y',
 
   acceptRanges: false,
-  setHeaders: (res) => res.setHeader('Content-Type', 'application/jose')
+  setHeaders
 };
 const staticMutableOptions = {
   cacheControl: true,
   immutable: false,
 
   acceptRanges: false,
-  setHeaders: (res) => res.setHeader('Content-Type', 'application/jose')
+  setHeaders
 };
 router.use('/ImmutableCollection', express.static('asyncLocalStorage/ImmutableCollection', staticImmutableOptions));
 router.use('/MutableCollection', express.static('asyncLocalStorage/MutableCollection', staticMutableOptions));
@@ -81,6 +85,29 @@ router.put('/VersionedCollection/:collectionName/:b/:c/:a/:rest', pathTag, getCo
 router.delete('/ImmutableCollection/:collectionName/:b/:c/:a/:rest', pathTag, getCollection('ImmutableCollection'), invokeCollectionMethod);
 router.delete('/MutableCollection/:collectionName/:b/:c/:a/:rest', pathTag, getCollection('MutableCollection'), invokeCollectionMethod);
 router.delete('/VersionedCollection/:collectionName/:b/:c/:a/:rest', pathTag, getCollection('VersionedCollection'), invokeCollectionMethod);
+
+router.use(express.text({ // Define request.body.
+  limit: '5mb'
+}));
+
+const dataChannels = {};
+router.post('/requestDataChannel/:tag', async (req, res, next) => {
+  const {params, body} = req;
+  const tag = params.tag;
+  console.log({tag, type: typeof(body), body, headers: req.headers});
+  const signals = JSON.parse(body);
+  const connection = dataChannels[tag] = new PromiseWebRTC({label: tag});
+  const dataPromise = new Promise(resolve => { // Resolves to an open data channel.
+    connection.peer.ondatachannel = event => resolve(event.channel);
+  });
+  console.log({tag, body, signals, connection, dataPromise});
+  dataPromise.then(dataChannel => {
+    console.log('got data channel', dataChannel);
+    dataChannel.onmessage = event => dataChannel.send(event.data); // Just echo what we are given.
+  });
+  connection.signals = signals; // Convey the posted offer+ice signals to our connection.
+  res.send(JSON.stringify(await connection.signals)); // Send back our signalling answer+ice.
+});
 
 export default router;
 
