@@ -45,7 +45,7 @@ describe('data channel', function () {
   });
 });
 
-xdescribe('Flexstore', function () {
+describe('Flexstore', function () {
   let user, otherUser, team, randomUser;
   const services = []; // fixme ['/', 'https://ki1r0y.com/flex/'];
   const blocks = Array.from({length: 1000 * writeSlowdown}, (_, index) => ({index}));
@@ -204,7 +204,7 @@ xdescribe('Flexstore', function () {
 	}, 10e3);
       });
     });
-  }/*
+  }
   testCollection(new ImmutableCollection({name: 'com.acme.immutable', services}),
 		 async (firstData, newData, signature, firstTag, newTag, collection) => {
 		   expect(firstTag).not.toBe(newTag);
@@ -220,7 +220,7 @@ xdescribe('Flexstore', function () {
 		   expect(firstTag).toBe(newTag);
 		   expect(signature.json).toEqual(newData);
 		   expect(signature.protectedHeader.act).toBe(otherUser);
-		 });*/
+		 });
   testCollection(new VersionedCollection({name: 'com.acme.versioned', services}),
 		 async (firstData, newData, signature, firstTag, newTag, collection) => {
 		   expect(firstTag).toBe(newTag);

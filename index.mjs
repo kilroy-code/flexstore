@@ -1,7 +1,7 @@
 import Credentials from '@ki1r0y/distributed-security';
 export { Credentials };
-//const {default:Persist} = await import((typeof(process) !== 'undefined') ? './persist-fs.mjs' : './persist-indexeddb.mjs');
-import Persist from './persist-hosted.mjs';
+const {default:Persist} = await import((typeof(process) !== 'undefined') ? './persist-fs.mjs' : './persist-indexeddb.mjs');
+//import Persist from './persist-hosted.mjs';
 const { CustomEvent, EventTarget } = globalThis;
 
 class Collection extends EventTarget {
@@ -171,9 +171,40 @@ class Collection extends EventTarget {
   }
 
   notifyInvalid(tag, operationLabel, message = undefined) {
-    console.warn(this.name, (this.debug && message) ||
+    console.warn(this.name, (/*this.debug &&*/ message) ||
 		 `Signature is not valid to ${operationLabel} ${tag || 'data'}.`);
     return undefined;
+  }
+  disallowWrite(existing, proposed) { // Return a reason string why the proposed verified protectedHeader
+    // should not be allowed to overrwrite the (possibly nullish) existing verified protectedHeader,
+    // else falsy if allowed.
+    if (!proposed) return 'invalid signature';
+    if (!existing) return null;
+    if (proposed.iat < existing.iat) return 'replay'
+    const existingOwner = existing.iss || existing.kid;
+    const proposedOwner = proposed.iss || proposed.kid;
+    // Exact match. Do we need to allow for an owner to transfer ownership to a sub/super/disjoint team?
+    // Currently, that would require a new record. (E.g., two Mutable/VersionedCollection items that
+    // have the same GUID payload property, but different tags. I.e., a different owner means a different tag.)
+    if (!proposedOwner || (proposedOwner !== existingOwner)) return 'not owner';
+    /*
+      We are not checking to see if author is currently a member of the owner team here, which
+      is called by put()/delete() in two circumstances:
+
+      this.validateForWriting() is called by put()/delete() which happens in the app (via store()/remove())
+      and during sync from another service:
+
+      1. From the app (vaia store()/remove(), where we have just created the signature. Signing itself
+      will fail if the (1-hour cached) key is no longer a member of the team. There is no interface
+      for the app to provide an old signature. (TODO: after we make get/put/delete internal.)
+
+      2. During sync from another service, where we are pulling in old records for which we don't have
+      team membership from that time.
+
+      If the app cares whether the author has been kicked from the team, the app itself will have to check.
+      TODO: we should provide a tool for that.
+    */
+    return null;
   }
   async validateForWriting(tag, signature, operationLabel, requireTag = false) {
     // A deep verify that checks against the existing item's (re-)verified headers.
@@ -182,34 +213,8 @@ class Collection extends EventTarget {
     if (!verified) return this.notifyInvalid(tag, operationLabel);
     tag = verified.tag = requireTag ? tag : this.tag(tag, verified);
     const existingVerified = await this.getVerified(tag);
-    if (existingVerified) {
-      const existing = existingVerified.protectedHeader;
-      const proposed = verified.protectedHeader;
-      if (proposed.iat < existing.iat) return this.notifyInvalid(tag, operationLabel, 'replay');
-      const existingOwner = existing.iss || existing.kid;
-      const proposedOwner = proposed.iss || proposed.kid;
-      // Exact match. Do we need to allow for an owner to transfer ownership to a sub/super/disjoint team?
-      // Currently, that would require a new record. (E.g., two Mutable/VersionedCollection items that
-      // have the same GUID payload property, but different tags. I.e., a different owner means a different tag.)
-      if (!proposedOwner || (proposedOwner !== existingOwner)) return this.notifyInvalid(tag, operationLabel, 'not owner');
-      /*
-	We are not checking to see if author is currently a member of the owner team here, which
-	is called by put()/delete() in two circumstances:
-	
-	this.validateForWriting() is called by put()/delete() which happens in the app (via store()/remove())
-	and during sync from another service:
-	
-	1. From the app (vaia store()/remove(), where we have just created the signature. Signing itself
-	will fail if the (1-hour cached) key is no longer a member of the team. There is no interface
-	for the app to provide an old signature. (TODO: after we make get/put/delete internal.)
-	
-	2. During sync from another service, where we are pulling in old records for which we don't have
-	team membership from that time.
-
-	If the app cares whether the author has been kicked from the team, the app itself will have to check.
-	TODO: we should provide a tool for that.
-      */
-    }
+    const disallowed = this.disallowWrite(existingVerified?.protectedHeader, verified?.protectedHeader, verified);
+    if (disallowed) return this.notifyInvalid(tag, operationLabel, disallowed);
     this.dispatchEvent(new CustomEvent('update', {detail: verified}));
     return verified;
   }
@@ -246,9 +251,23 @@ class Collection extends EventTarget {
   }
 }
 // TODO: different rules for hash tag, synchronizeTags, synchronize1
+// FIXME: store for immutable shouldn't "take":
+//        - Maybe unify this with reconcilation rules?
+//        - Unit tests will now be wrong for immutable.
+//        - What about store/delete from peer on VersionedCollection?
 export class ImmutableCollection extends Collection {
   tag(tag, validation) { // Ignores tag. Just the hash.
     return validation.protectedHeader.sub;
+  }
+  disallowWrite(existing, proposed, verified) { // Overrides super by allowing EARLIER rather than later.
+    if (!proposed) return 'invalid signature';
+    if (!existing) return null;
+    const existingOwner = existing.iss || existing.kid;
+    const proposedOwner = proposed.iss || proposed.kid;
+    if (!proposedOwner || (proposedOwner !== existingOwner)) return 'not owner';
+    if (!verified.payload.length) return null; // Later delete is ok.
+    if (proposed.iat > existing.iat) return 'rewrite'; // Otherwise, later writes are not.
+    return null;
   }
 }
 export class MutableCollection extends Collection {
