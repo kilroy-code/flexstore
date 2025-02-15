@@ -1,5 +1,5 @@
 import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../index.mjs';
-import { PromiseWebRTC } from '../webrtc.mjs';
+import { testPrompt } from './support/testPrompt.mjs';
 const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalThis;
 
 // N.B.: If a previous failed run was not able to cleanup, there may be old objects owned by old users.
@@ -8,42 +8,9 @@ const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalTh
 // Percent of a normal implementation at which we expect this implemention to write stuff.
 const writeSlowdown = 0.05//fixme (typeof(process) !== 'undefined') ? 0.05 : 1; // My atomic fs writes in node are awful.
 const readSlowdown = 0.25;
-const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
-
 
 // TODO:getUserDeviceSecret => prompt
-Credentials.getUserDeviceSecret  = function (tag, promptString) { // Used when first creating a user credential, or when adding an existing credential to a new device.
-  function swizzle(seed) { return seed + 'appSalt'; } // Could also look up in an app-specific customer database.
-  if (promptString) return swizzle(promptString); // fixme prompt(promptString)); 
-  return swizzle(tag);
-};
-
-describe('data channel', function () {
-  it('smokes', async function () {
-    const tag = 'testing';
-    const message = 'echo';
-
-    const url = new URL(`/flexstore/requestDataChannel/${tag}`, baseURL);
-    const connection = new PromiseWebRTC({label: tag});
-    const dataChannelPromise = connection.createDataChannel();
-    // Send them our signals:
-    const outboundSignals = await connection.signals;
-    const body = JSON.stringify(outboundSignals);
-    const request = await fetch(url, {method: 'POST', body});
-    const response = await request.text();
-    // And accept their response:
-    connection.signals = JSON.parse(response);
-
-    // When the channel opens, send a message and expect the echo.
-    const dataChannel = await dataChannelPromise;
-    dataChannel.send(message);
-    const echo = await new Promise(resolve => {
-      dataChannel.onmessage = event => resolve(event.data);
-    });
-    expect(echo).toBe(message);
-    dataChannel.close();
-  });
-});
+Credentials.getUserDeviceSecret = testPrompt;
 
 describe('Flexstore', function () {
   let user, otherUser, team, randomUser;
@@ -206,6 +173,7 @@ describe('Flexstore', function () {
     });
   }
   testCollection(new ImmutableCollection({name: 'com.acme.immutable', services}),
+		 // TODO: delete earlier than written
 		 async (firstData, newData, signature, firstTag, newTag, collection) => {
 		   expect(firstTag).not.toBe(newTag);
 		   expect(signature.json).toEqual(firstData);
