@@ -1,10 +1,11 @@
-import { PromiseWebRTC } from '../webrtc.mjs';
-import Synchronizer from '../synchronizer.mjs';
-import { Credentials, ImmutableCollection } from '../index.mjs';
+import { PromiseWebRTC } from '../lib/webrtc.mjs';
+import Synchronizer from '../lib/synchronizer.mjs';
+import { Credentials, ImmutableCollection } from '../lib/collections.mjs';
+
 import { testPrompt } from './support/testPrompt.mjs';
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
-const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 
+const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 Credentials.getUserDeviceSecret = testPrompt;
 
 describe('Synchronizer', function () {

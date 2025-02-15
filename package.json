@@ -1,0 +1,39 @@
+{
+  "name": "flexstore",
+  "version": "0.0.1",
+  "description": "Safe and private storage replicated between clients and relays, with realtime updates.",
+  "main": "index.js",
+  "scripts": {
+    "test": "jasmine"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kilroy-code/flexstore.git"
+  },
+  "keywords": [
+    "key-value",
+    "storage",
+    "p2p",
+    "client",
+    "server",
+    "relay",
+    "end-to-end",
+    "encryption",
+    "cryptography",
+    "signed",
+    "privacy"
+  ],
+  "author": "howard@ki1r0y.com",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/kilroy-code/flexstore/issues"
+  },
+  "homepage": "https://github.com/kilroy-code/flexstore#readme",
+  "dependencies": {
+    "node-pre-gyp": "^0.17.0",
+    "wrtc": "^0.4.7"
+  },
+  "devDependencies": {
+    "jasmine": "^5.6.0"
+  }
+}
