@@ -4,7 +4,7 @@ const {default:wrtc} = await ((typeof(process) !== 'undefined') ? import('wrtc')
 // Currently supports data, via createDataChannel().
 // When something triggers negotiation (such as the above method), it will generate calls to signal(), which needs to be defined by subclasses.
 export class WebRTC {
-  constructor({label = '', rtcConfiguration = {}} = {}, debug = false) {
+  constructor({label = '', rtcConfiguration = {}, debug = false} = {}) {
     this.label = label;
     this.configuration = rtcConfiguration;
     this.debug = debug;

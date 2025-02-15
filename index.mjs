@@ -1,13 +1,15 @@
 import Credentials from '@ki1r0y/distributed-security';
-export { Credentials };
+import Synchronizer from './synchronizer.mjs';
 const {default:Persist} = await import((typeof(process) !== 'undefined') ? './persist-fs.mjs' : './persist-indexeddb.mjs');
 //import Persist from './persist-hosted.mjs';
 const { CustomEvent, EventTarget } = globalThis;
 
+export { Credentials, Synchronizer, Persist };
+
 class Collection extends EventTarget {
-  constructor({name, services = [], preserveDeletions = !!services.length, persistenceClass = Persist}) {
+  constructor({name, services = [], preserveDeletions = !!services.length, persistenceClass = Persist, debug}) {
     super();
-    Object.assign(this, {name, preserveDeletions, persistenceClass});
+    Object.assign(this, {name, preserveDeletions, persistenceClass, debug});
     this.synchronize(services);
     this.persist = new persistenceClass({collection: this});
   }
@@ -46,7 +48,6 @@ class Collection extends EventTarget {
     this.tags.delete(tag);
   }
   
-  debug = false;
   log(...rest) {
     if (!this.debug) return;
     console.log(this.name, ...rest);
@@ -261,11 +262,11 @@ export class ImmutableCollection extends Collection {
   }
   disallowWrite(existing, proposed, verified) { // Overrides super by allowing EARLIER rather than later.
     if (!proposed) return 'invalid signature';
-    if (!existing) return null;
+    if (!existing && verified.payload.length) return null;
     const existingOwner = existing.iss || existing.kid;
     const proposedOwner = proposed.iss || proposed.kid;
     if (!proposedOwner || (proposedOwner !== existingOwner)) return 'not owner';
-    if (!verified.payload.length) return null; // Later delete is ok.
+    if (!verified.payload.length && (proposed.iat > existing.iat)) return null; // Later delete is ok.
     if (proposed.iat > existing.iat) return 'rewrite'; // Otherwise, later writes are not.
     return null;
   }
@@ -277,6 +278,9 @@ export class MutableCollection extends Collection {
 }
 
 export class VersionedCollection extends MutableCollection {
+  // TODO: This works and demonstrates having a collection using other collections.
+  // However, having a big timestamp => fixnum map is bad for performance as the history gets longer.
+  // This should be split up into what is described in versioned.md.
   constructor(...rest) {
     super(...rest);
     // Same collection name, but different type.
@@ -387,5 +391,5 @@ Credentials.Storage.store = async (collectionName, tag, signature) => {
 Credentials.collections = {};
 ['EncryptionKey', 'KeyRecovery', 'Team'].forEach(name => Credentials.collections[name] = new MutableCollection({name}));
 
-export default {Credentials, ImmutableCollection, MutableCollection, VersionedCollection};
+export default {Credentials, ImmutableCollection, MutableCollection, VersionedCollection, Synchronizer, Persist};
 Object.assign(globalThis, {Persist, Credentials, ImmutableCollection, MutableCollection, VersionedCollection}); // fixme remove
