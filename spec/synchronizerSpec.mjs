@@ -45,10 +45,10 @@ describe('Synchronizer', function () {
       await a.completeConnection(bSignals);
     }
     let a, b;
-    function setup(aProps = {}, bProps = {}) {
+    function setup(aProps = {}, bProps = {}, doConnect = true) {
       a = makeSynchronizer({name: 'a', ...aProps});
       b = makeSynchronizer({name: 'b', ...bProps});
-      return connect(a, b);
+      return doConnect && connect(a, b);
     }
     describe('initializations', function () {
       beforeAll(function () {
@@ -124,6 +124,44 @@ describe('Synchronizer', function () {
 	  expect(await b.completedSynchronization).toBe(2);
 	  expect((await b.collection.retrieve({tag: tag1})).text).toBe('abcd');
 	  expect((await b.collection.retrieve({tag: tag2})).text).toBe('1234');	  
+	});
+	describe('complex sync', function () {
+	  let author1, author2, owner, tag1, tag2, tag3, tag4;
+	  beforeAll(async function () {
+	    await setup({}, {}, false); // no connect
+	    author1 = Credentials.author;
+	    author2 = await Credentials.createAuthor('foo');
+	    owner = await Credentials.create(author1, author2);
+
+	    tag1 = await a.collection.store('abc', {author: author1, owner});
+	    tag2 = await a.collection.store('123', {author: author1, owner});
+	    tag3 = await b.collection.store('abc', {author: author2, owner});
+	    tag4 = await b.collection.store('xyz', {author: author2, owner});
+
+	    await connect(a, b);
+	    await a.startedSynchronization;
+	    // ... stors stuff here
+	    expect(await a.completedSynchronization).toBe(2);
+	    expect(await b.completedSynchronization).toBe(2);
+	    // ... store stuff here
+	  });
+	  it('b gets from pre-sync a.', async function () {
+	    expect((await b.collection.retrieve({tag: tag2})).text).toBe('123');
+	  });
+	  it('a get from pre-sync b.', async function () {
+	    expect((await a.collection.retrieve({tag: tag4})).text).toBe('xyz');
+	  });
+	  it('a and b agree on result from pre-sync difference.', async function () {
+	    expect(tag1).toBe(tag3);
+	    const matchedA = await a.collection.retrieve({tag: tag1});
+	    const matchedB = await b.collection.retrieve({tag: tag1});
+	    expect(matchedA.text).toBe(matchedB.text);
+	    expect(matchedA.protectedHeader.iat).toBe(matchedB.protectedHeader.iat);
+	    expect(matchedA.protectedHeader.act).toBe(matchedB.protectedHeader.act);
+	    expect(matchedA.protectedHeader.iss).toBe(matchedB.protectedHeader.iss);
+	    // For Immutable collection, earlier one wins.
+	    expect(matchedA.protectedHeader.act).toBe(author1);
+	  });
 	});
       });
     });
