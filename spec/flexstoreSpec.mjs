@@ -174,7 +174,10 @@ describe('Flexstore', function () {
     });
   }
   testCollection(new ImmutableCollection({name: 'com.acme.immutable', services}),
-		 // TODO: delete earlier than written
+		 // TODO: store stamped earlier than existing should work.
+		 // TODO: delete after written whould work.
+		 // TODO: store after delete should work.
+		 // TODO: delete stamped earlier than existing should fail(?)
 		 async (firstData, newData, signature, firstTag, newTag, collection) => {
 		   expect(firstTag).not.toBe(newTag);
 		   expect(signature.json).toEqual(firstData);
@@ -191,6 +194,7 @@ describe('Flexstore', function () {
 		   expect(signature.protectedHeader.act).toBe(otherUser);
 		 });
   testCollection(new VersionedCollection({name: 'com.acme.versioned', services}),
+		 // TODO: various cases.
 		 async (firstData, newData, signature, firstTag, newTag, collection) => {
 		   expect(firstTag).toBe(newTag);
 		   expect(signature.json).toEqual(newData);

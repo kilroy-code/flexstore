@@ -40,9 +40,9 @@ describe('Synchronizer', function () {
     function makeCollection({name = 'test', ...props}) { return new ImmutableCollection({name, ...props});}
     function makeSynchronizer({peerName = 'peer', ...props}) { return new Synchronizer({peerName, ...props, collection: makeCollection(props)}); }
     async function connect(a, b) { // Connect two synchronizer instances.
-      const aSignals = await a.connect();
-      const bSignals = await b.connect(aSignals);
-      await a.completeConnection(bSignals);
+      const aSignals = await a.startConnection();
+      const bSignals = await b.startConnection(aSignals);
+      a.completeConnection(bSignals);
     }
     let a, b;
     function setup(aProps = {}, bProps = {}, doConnect = true) {
@@ -142,13 +142,13 @@ describe('Synchronizer', function () {
 	    tag3 = await bCol.store('abc', {author: author2, owner});
 	    tag4 = await bCol.store('xyz', {author: author2, owner});
 
-	    aCol.synchronize('peerB');
-	    bCol.synchronize('peerA');
-	    a = aCol.synchronizers.peerB;
-	    b = bCol.synchronizers.peerA;
-	    await connect(a, b);
-	    await a.startedSynchronization;
+	    await aCol.synchronize(bCol); // In this testing mode, first one gets some setup, but doesn't actually wait for sync.
+	    await bCol.synchronize(aCol);
+	    a = aCol.synchronizers.get(bCol);
+	    b = bCol.synchronizers.get(aCol);
+
 	    // ... store stuff here
+
 	    expect(await a.completedSynchronization).toBe(2);
 	    expect(await b.completedSynchronization).toBe(2);
 	    // ... store stuff here
@@ -180,6 +180,10 @@ describe('Synchronizer', function () {
 	  });
 	});
       });
+      // TODO: VersionedCollection synchronizations:
+      // - non-owner
+      // - impossible history: signed, but depending on something that comes later
+      // - various deleted history cases
     });
   });
 });
