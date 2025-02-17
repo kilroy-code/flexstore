@@ -103,14 +103,14 @@ describe('Synchronizer', function () {
 	expect(await b.completedSynchronization).toBe(0);	
       });
       describe('authorized', function () {
+	async function clean(synchronizer) {
+	  await Promise.all((await synchronizer.collection.list('skipSync')).map(tag => synchronizer.collection.remove({tag})));
+	  expect(await synchronizer.collection.list.length).toBe(0);
+	}
 	beforeAll(async function () {
 	  Credentials.author = await Credentials.createAuthor('test pin:');
 	});
 	afterAll(async function () {
-	  async function clean(synchronizer) {
-	    await Promise.all((await synchronizer.collection.list('skipSync')).map(tag => synchronizer.collection.remove({tag})));
-	    expect(await synchronizer.collection.list.length).toBe(0);
-	  }
 	  await clean(a);
 	  await clean(b);	  
 	  await Credentials.destroy({tag: Credentials.author, recursiveMembers: true});
@@ -123,27 +123,43 @@ describe('Synchronizer', function () {
 
 	  expect(await b.completedSynchronization).toBe(2);
 	  expect((await b.collection.retrieve({tag: tag1})).text).toBe('abcd');
-	  expect((await b.collection.retrieve({tag: tag2})).text).toBe('1234');	  
+	  expect((await b.collection.retrieve({tag: tag2})).text).toBe('1234');
+	  await clean(a);
+	  await clean(b);
 	});
 	describe('complex sync', function () {
 	  let author1, author2, owner, tag1, tag2, tag3, tag4;
 	  beforeAll(async function () {
-	    await setup({}, {}, false); // no connect
+	    let aCol = new ImmutableCollection({name: 'a'}),
+		bCol = new ImmutableCollection({name: 'b'});
+
 	    author1 = Credentials.author;
 	    author2 = await Credentials.createAuthor('foo');
 	    owner = await Credentials.create(author1, author2);
 
-	    tag1 = await a.collection.store('abc', {author: author1, owner});
-	    tag2 = await a.collection.store('123', {author: author1, owner});
-	    tag3 = await b.collection.store('abc', {author: author2, owner});
-	    tag4 = await b.collection.store('xyz', {author: author2, owner});
+	    tag1 = await aCol.store('abc', {author: author1, owner});
+	    tag2 = await aCol.store('123', {author: author1, owner});
+	    tag3 = await bCol.store('abc', {author: author2, owner});
+	    tag4 = await bCol.store('xyz', {author: author2, owner});
 
+	    aCol.synchronize('peerB');
+	    bCol.synchronize('peerA');
+	    a = aCol.synchronizers.peerB;
+	    b = bCol.synchronizers.peerA;
 	    await connect(a, b);
 	    await a.startedSynchronization;
-	    // ... stors stuff here
+	    // ... store stuff here
 	    expect(await a.completedSynchronization).toBe(2);
 	    expect(await b.completedSynchronization).toBe(2);
 	    // ... store stuff here
+	  }, 10e3);
+	  afterAll(async function () {
+	    Credentials.owner = owner;
+	    await clean(a);
+	    await clean(b);
+	    Credentials.owner = null;
+	    await Credentials.destroy(owner);
+	    await Credentials.destroy({tag: author2, recursiveMembers: true});
 	  });
 	  it('b gets from pre-sync a.', async function () {
 	    expect((await b.collection.retrieve({tag: tag2})).text).toBe('123');

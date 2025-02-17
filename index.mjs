@@ -4,4 +4,3 @@ import { ImmutableCollection, MutableCollection, VersionedCollection } from  './
 
 export { Credentials, ImmutableCollection, MutableCollection, VersionedCollection, Synchronizer };
 export default { Credentials, ImmutableCollection, MutableCollection, VersionedCollection, Synchronizer };
-Object.assign(globalThis, {Credentials, ImmutableCollection, MutableCollection, VersionedCollection}); // fixme remove

@@ -17,7 +17,7 @@ describe('Flexstore', function () {
   const services = []; // fixme ['/', 'https://ki1r0y.com/flex/'];
   const blocks = Array.from({length: 1000 * writeSlowdown}, (_, index) => ({index}));
   beforeAll(async function () {
-    Credentials.synchronize(services);
+    Credentials.synchronize(...services);
 
     // user, otherUser, and randomUser are distinct users authorized on this machine. Only user and otherUser are on team.
     user = Credentials.author = await Credentials.createAuthor('test pin:');
@@ -87,6 +87,7 @@ describe('Flexstore', function () {
 	  tag2 = await collection.store(data);
 	}, 10e3);
 	afterAll(async function () {
+	  Credentials.encryption = false;
 	  await collection.remove({tag: tag2});
 	  await collection.remove({tag: tag3});	 // May be a no-op.
 	  const afterList = await collection.list();
