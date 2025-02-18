@@ -24,7 +24,7 @@ describe('Flexstore', function () {
     otherUser = await Credentials.createAuthor('airspeed velocity?');
     team = await Credentials.create(Credentials.author, otherUser);
     randomUser = await Credentials.createAuthor("favorite color?");
-  }, 25e3);
+  }, 30e3); // !!
   afterAll(async function () {
     await Credentials.destroy({tag: randomUser, recursiveMembers: true});
     await Credentials.destroy({tag: otherUser, recursiveMembers: true});

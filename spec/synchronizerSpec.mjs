@@ -104,6 +104,7 @@ describe('Synchronizer', function () {
       });
       describe('authorized', function () {
 	async function clean(synchronizer) {
+	  await synchronizer.disconnect();
 	  await Promise.all((await synchronizer.collection.list('skipSync')).map(tag => synchronizer.collection.remove({tag})));
 	  expect(await synchronizer.collection.list.length).toBe(0);
 	}
@@ -112,7 +113,7 @@ describe('Synchronizer', function () {
 	});
 	afterAll(async function () {
 	  await clean(a);
-	  await clean(b);	  
+	  await clean(b);
 	  await Credentials.destroy({tag: Credentials.author, recursiveMembers: true});
 	});
 	it('basic sync', async function () {
@@ -125,10 +126,10 @@ describe('Synchronizer', function () {
 	  expect((await b.collection.retrieve({tag: tag1})).text).toBe('abcd');
 	  expect((await b.collection.retrieve({tag: tag2})).text).toBe('1234');
 	  await clean(a);
-	  await clean(b);
+	  await clean(b);	  
 	});
 	describe('complex sync', function () {
-	  let author1, author2, owner, tag1, tag2, tag3, tag4;
+	  let author1, author2, owner, tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8;
 	  beforeAll(async function () {
 	    let aCol = new ImmutableCollection({name: 'a'}),
 		bCol = new ImmutableCollection({name: 'b'});
@@ -142,18 +143,36 @@ describe('Synchronizer', function () {
 	    tag3 = await bCol.store('abc', {author: author2, owner});
 	    tag4 = await bCol.store('xyz', {author: author2, owner});
 
+	    aCol.updates = []; bCol.updates = [];
+	    aCol.onupdate =  event => aCol.updates.push(event.detail.text);
+	    bCol.onupdate = event => bCol.updates.push(event.detail.text);
 	    await aCol.synchronize(bCol); // In this testing mode, first one gets some setup, but doesn't actually wait for sync.
 	    await bCol.synchronize(aCol);
 	    a = aCol.synchronizers.get(bCol);
 	    b = bCol.synchronizers.get(aCol);
 
-	    // ... store stuff here
+	    // Without waiting for synchronization to complete.
+	    tag5 = await aCol.store('foo', {author: author1, owner});
+	    tag6 = await bCol.store('bar', {author: author2, owner});  // As it happens, a will be pushed tag6 after a completes sync.
 
 	    expect(await a.completedSynchronization).toBe(2);
 	    expect(await b.completedSynchronization).toBe(2);
-	    // ... store stuff here
+
+	    // Now send some more, after sync.
+	    tag8 = await aCol.store('red', {author: author1, owner});
+	    tag7 = await bCol.store('white', {author: author2, owner});
 	  }, 10e3);
 	  afterAll(async function () {
+	    a.collection.onupdate = null;
+	    b.collection.onupdate = null;
+	    // Both get updates for everything added to either side since connecting: foo, bar, red, white.
+	    // But in addition:
+	    //   a gets xyz (which it did not ahve).
+	    //   b gets 123 (which it didn't have) and a reconciled value for abc (of which it had the wrong sig).
+	    a.collection.updates.sort(); // The timing of those received during synchronization can be different.
+	    b.collection.updates.sort();
+	    expect(a.collection.updates).toEqual([              'bar', 'foo', 'red', 'white', 'xyz']);
+	    expect(b.collection.updates).toEqual(['123', 'abc', 'bar', 'foo', 'red', 'white']);
 	    Credentials.owner = owner;
 	    await clean(a);
 	    await clean(b);
@@ -177,6 +196,14 @@ describe('Synchronizer', function () {
 	    expect(matchedA.protectedHeader.iss).toBe(matchedB.protectedHeader.iss);
 	    // For Immutable collection, earlier one wins.
 	    expect(matchedA.protectedHeader.act).toBe(author1);
+	  });
+	  it('collections receive new data saved during sync.', async function () {
+	    expect((await a.collection.retrieve({tag: tag6})).text).toBe('bar');
+	    expect((await b.collection.retrieve({tag: tag5})).text).toBe('foo');
+	  });
+	  it('collections receive new data saved after sync.', async function () {
+	    expect((await a.collection.retrieve({tag: tag7})).text).toBe('white');
+	    expect((await b.collection.retrieve({tag: tag8})).text).toBe('red');
 	  });
 	});
       });
