@@ -1,6 +1,6 @@
 import { PromiseWebRTC } from '../lib/webrtc.mjs';
 import Synchronizer from '../lib/synchronizer.mjs';
-import { Credentials, ImmutableCollection } from '../lib/collections.mjs';
+import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../lib/collections.mjs';
 
 import { testPrompt } from './support/testPrompt.mjs';
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
@@ -37,7 +37,7 @@ describe('Synchronizer', function () {
   });
   describe('peer', function () {
     const base = 'http://localhost:3000/flexstore';
-    function makeCollection({name = 'test', ...props}) { return new ImmutableCollection({name, ...props});}
+    function makeCollection({name = 'test', kind = ImmutableCollection, ...props}) { return new kind({name, ...props});}
     function makeSynchronizer({peerName = 'peer', ...props}) { return new Synchronizer({peerName, ...props, collection: makeCollection(props)}); }
     async function connect(a, b) { // Connect two synchronizer instances.
       const aSignals = await a.startConnection();
@@ -104,108 +104,137 @@ describe('Synchronizer', function () {
       });
       describe('authorized', function () {
 	async function clean(synchronizer) {
-	  await synchronizer.disconnect();
-	  await Promise.all((await synchronizer.collection.list('skipSync')).map(tag => synchronizer.collection.remove({tag})));
+	  await synchronizer.collection.disconnect();
+	  const list = await synchronizer.collection.list('skipSync');
+	  await Promise.all(list.map(tag => synchronizer.collection.remove({tag})));
 	  expect(await synchronizer.collection.list.length).toBe(0);
 	}
 	beforeAll(async function () {
 	  Credentials.author = await Credentials.createAuthor('test pin:');
-	});
+	}, 10e3);
 	afterAll(async function () {
 	  await clean(a);
 	  await clean(b);
 	  await Credentials.destroy({tag: Credentials.author, recursiveMembers: true});
 	});
-	it('basic sync', async function () {
-	  await setup();
-	  const tag1 = await a.collection.store('abcd');
-	  const tag2 = await a.collection.store('1234');
-	  await a.startedSynchronization;
+	function testCollection(kind, label = kind.name) {
+	  describe(label, function () {
+	    it('basic sync', async function () {
+	      let aCol = new kind({name: 'a'}),
+		  bCol = new kind({name: 'b'});
 
-	  expect(await b.completedSynchronization).toBe(2);
-	  expect((await b.collection.retrieve({tag: tag1})).text).toBe('abcd');
-	  expect((await b.collection.retrieve({tag: tag2})).text).toBe('1234');
-	  await clean(a);
-	  await clean(b);	  
-	});
-	describe('complex sync', function () {
-	  let author1, author2, owner, tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8;
-	  beforeAll(async function () {
-	    let aCol = new ImmutableCollection({name: 'a'}),
-		bCol = new ImmutableCollection({name: 'b'});
+	      const tag1 = await aCol.store('abcd');
+	      const tag2 = await aCol.store('1234');
+	      await aCol.synchronize(bCol);
+	      await bCol.synchronize(aCol);
+	      a = aCol.synchronizers.get(bCol);
+	      b = bCol.synchronizers.get(aCol);
 
-	    author1 = Credentials.author;
-	    author2 = await Credentials.createAuthor('foo');
-	    owner = await Credentials.create(author1, author2);
+	      expect(await b.completedSynchronization).toBe(2);
+	      expect((await b.collection.retrieve({tag: tag1})).text).toBe('abcd');
+	      expect((await b.collection.retrieve({tag: tag2})).text).toBe('1234');
+	      await clean(a);
+	      await clean(b);
+	    });
+	    describe('complex sync', function () {
+	      let author1, author2, owner, tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8, winningAuthor;
+	      beforeAll(async function () {
+		let aCol = new kind({name: 'a'}),
+		    bCol = new kind({name: 'b'});
 
-	    tag1 = await aCol.store('abc', {author: author1, owner});
-	    tag2 = await aCol.store('123', {author: author1, owner});
-	    tag3 = await bCol.store('abc', {author: author2, owner});
-	    tag4 = await bCol.store('xyz', {author: author2, owner});
+		author1 = Credentials.author;
+		author2 = await Credentials.createAuthor('foo');
+		owner = await Credentials.create(author1, author2);
 
-	    aCol.updates = []; bCol.updates = [];
-	    aCol.onupdate =  event => aCol.updates.push(event.detail.text);
-	    bCol.onupdate = event => bCol.updates.push(event.detail.text);
-	    await aCol.synchronize(bCol); // In this testing mode, first one gets some setup, but doesn't actually wait for sync.
-	    await bCol.synchronize(aCol);
-	    a = aCol.synchronizers.get(bCol);
-	    b = bCol.synchronizers.get(aCol);
+		const firstWins = label === 'ImmutableCollection';
+		// Immutable: we first store author1 in collection 'a', and that takes precedent over what 'b' says.
+		// Mutable: we last store author2 in collection 'a', and that takes precendent over what 'b' said.
+		// Versioned: As with Mutable, but both versions 'abc' have unique antecedent hashes, so both are retained
+		//   (at different timestamps), with the later one taking precedence.
+		const firstCollection = firstWins ? aCol : bCol;
+		const secondCollection = firstWins ? bCol : aCol;
+		winningAuthor = firstWins ? author1 : author2;
+		tag1 = await firstCollection.store('abc', {author: author1, owner});
+		tag2 = await aCol.store('123', {author: author1, owner});
+		tag3 = await secondCollection.store('abc', {author: author2, owner});
+		tag4 = await bCol.store('xyz', {author: author2, owner});
 
-	    // Without waiting for synchronization to complete.
-	    tag5 = await aCol.store('foo', {author: author1, owner});
-	    tag6 = await bCol.store('bar', {author: author2, owner});  // As it happens, a will be pushed tag6 after a completes sync.
+		aCol.updates = []; bCol.updates = [];
+		aCol.onupdate =  event => aCol.updates.push(event.detail.text);
+		bCol.onupdate = event => bCol.updates.push(event.detail.text);
+		await aCol.synchronize(bCol); // In this testing mode, first one gets some setup, but doesn't actually wait for sync.
+		await bCol.synchronize(aCol);
+		a = aCol.synchronizers.get(bCol);
+		b = bCol.synchronizers.get(aCol);
 
-	    expect(await a.completedSynchronization).toBe(2);
-	    expect(await b.completedSynchronization).toBe(2);
+		// Without waiting for synchronization to complete.
+		tag5 = await aCol.store('foo', {author: author1, owner});
+		tag6 = await bCol.store('bar', {author: author2, owner});  // As it happens, a will be pushed tag6 after a completes sync.
 
-	    // Now send some more, after sync.
-	    tag8 = await aCol.store('red', {author: author1, owner});
-	    tag7 = await bCol.store('white', {author: author2, owner});
-	  }, 10e3);
-	  afterAll(async function () {
-	    a.collection.onupdate = null;
-	    b.collection.onupdate = null;
-	    // Both get updates for everything added to either side since connecting: foo, bar, red, white.
-	    // But in addition:
-	    //   a gets xyz (which it did not ahve).
-	    //   b gets 123 (which it didn't have) and a reconciled value for abc (of which it had the wrong sig).
-	    a.collection.updates.sort(); // The timing of those received during synchronization can be different.
-	    b.collection.updates.sort();
-	    expect(a.collection.updates).toEqual([              'bar', 'foo', 'red', 'white', 'xyz']);
-	    expect(b.collection.updates).toEqual(['123', 'abc', 'bar', 'foo', 'red', 'white']);
-	    Credentials.owner = owner;
-	    await clean(a);
-	    await clean(b);
-	    Credentials.owner = null;
-	    await Credentials.destroy(owner);
-	    await Credentials.destroy({tag: author2, recursiveMembers: true});
+		expect(await a.completedSynchronization).toBe(2);
+		expect(await b.completedSynchronization).toBe(2);
+
+		// Now send some more, after sync.
+		tag7 = await bCol.store('white', {author: author2, owner});
+		tag8 = await aCol.store('red', {author: author1, owner});
+		// After synchronization is complete, we no longer check with the other side when reading,
+		// but instead rely on getting notice from the other side about any updates.
+		// We do not provide any way to check. However, it is entirely reasonable to expect any such updates
+		// to arrive within a second.
+		await new Promise(resolve => setTimeout(resolve, 3e3)); // fixme time
+	      }, 20e3);
+	      afterAll(async function () {
+		a.collection.onupdate = null;
+		b.collection.onupdate = null;
+		// Both get updates for everything added to either side since connecting: foo, bar, red, white.
+		// But in addition:
+		//   a gets xyz (which it did not ahve).
+		//   b gets 123 (which it didn't have) and a reconciled value for abc (of which it had the wrong sig).
+		a.collection.updates.sort(); // The timing of those received during synchronization can be different.
+		b.collection.updates.sort();
+		let aUpdates = [              'bar', 'foo', 'red', 'white', 'xyz'];
+		let bUpdates = ['123', 'abc', 'bar', 'foo', 'red', 'white'];
+		// For VersionedCollection both sides have a unique 'abc' to tell the other about.
+		if (label === 'VersionedCollection') aUpdates = ['abc', ...aUpdates];
+		expect(a.collection.updates).toEqual(aUpdates);
+		expect(b.collection.updates).toEqual(bUpdates);
+		Credentials.owner = owner;
+		await clean(a);
+		await clean(b);
+		Credentials.owner = null;
+		await Credentials.destroy(owner);
+		await Credentials.destroy({tag: author2, recursiveMembers: true});
+	      });
+	      it('b gets from pre-sync a.', async function () {
+		expect((await b.collection.retrieve({tag: tag2})).text).toBe('123');
+	      });
+	      it('a get from pre-sync b.', async function () {
+		expect((await a.collection.retrieve({tag: tag4})).text).toBe('xyz');
+	      });
+	      it('a and b agree on result from pre-sync difference.', async function () {
+		expect(tag1).toBe(tag3);
+		const matchedA = await a.collection.retrieve({tag: tag1});
+		const matchedB = await b.collection.retrieve({tag: tag1});
+		expect(matchedA.text).toBe(matchedB.text);
+		expect(matchedA.protectedHeader.iat).toBe(matchedB.protectedHeader.iat);
+		expect(matchedA.protectedHeader.act).toBe(matchedB.protectedHeader.act);
+		expect(matchedA.protectedHeader.iss).toBe(matchedB.protectedHeader.iss);
+		expect(matchedA.protectedHeader.act).toBe(winningAuthor);
+	      });
+	      /*x*/it('collections receive new data saved during sync.', async function () {
+		expect((await a.collection.retrieve({tag: tag6})).text).toBe('bar');
+		expect((await b.collection.retrieve({tag: tag5})).text).toBe('foo');
+	      });
+	      it('collections receive new data saved after sync.', async function () {
+		expect((await a.collection.retrieve({tag: tag7})).text).toBe('white');
+		expect((await b.collection.retrieve({tag: tag8})).text).toBe('red');
+	      });
+	    });
 	  });
-	  it('b gets from pre-sync a.', async function () {
-	    expect((await b.collection.retrieve({tag: tag2})).text).toBe('123');
-	  });
-	  it('a get from pre-sync b.', async function () {
-	    expect((await a.collection.retrieve({tag: tag4})).text).toBe('xyz');
-	  });
-	  it('a and b agree on result from pre-sync difference.', async function () {
-	    expect(tag1).toBe(tag3);
-	    const matchedA = await a.collection.retrieve({tag: tag1});
-	    const matchedB = await b.collection.retrieve({tag: tag1});
-	    expect(matchedA.text).toBe(matchedB.text);
-	    expect(matchedA.protectedHeader.iat).toBe(matchedB.protectedHeader.iat);
-	    expect(matchedA.protectedHeader.act).toBe(matchedB.protectedHeader.act);
-	    expect(matchedA.protectedHeader.iss).toBe(matchedB.protectedHeader.iss);
-	    // For Immutable collection, earlier one wins.
-	    expect(matchedA.protectedHeader.act).toBe(author1);
-	  });
-	  it('collections receive new data saved during sync.', async function () {
-	    expect((await a.collection.retrieve({tag: tag6})).text).toBe('bar');
-	    expect((await b.collection.retrieve({tag: tag5})).text).toBe('foo');
-	  });
-	  it('collections receive new data saved after sync.', async function () {
-	    expect((await a.collection.retrieve({tag: tag7})).text).toBe('white');
-	    expect((await b.collection.retrieve({tag: tag8})).text).toBe('red');
-	  });
-	});
+	}
+	testCollection(ImmutableCollection);
+	testCollection(MutableCollection);
+	testCollection(VersionedCollection);
       });
       // TODO: VersionedCollection synchronizations:
       // - non-owner
