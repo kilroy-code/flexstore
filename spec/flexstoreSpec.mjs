@@ -63,7 +63,7 @@ describe('Flexstore', function () {
       it('stores.', function () {
 	expect(typeof tag).toBe('string');
       });
-      it('cannot be written by a different user (even with the same data).', async function () {
+      it('cannot be written by a different owner (even with the same data).', async function () {
 	await expectAsync(collection.store(data, {tag, author: randomUser})).toBeRejected();
       });
       it('retrieves.', async function () {
@@ -82,6 +82,7 @@ describe('Flexstore', function () {
 	beforeAll(async function () {
 	  updateCount = 0;
 	  previousOwner = Credentials.owner;
+	  // Store data in whatever tag gets generated as "tag2". Owned by team.
 	  Credentials.owner = team;
 	  Credentials.encryption = 'team';
 	  tag2 = await collection.store(data);
@@ -100,6 +101,7 @@ describe('Flexstore', function () {
 	it('team members can re-store', async function () {
 	  const newData = Object.assign({}, data, {birthday: '03/03'});
 	  Credentials.author = otherUser;
+	  // Store slightly different data at the same tag2, by a different member of the same team. restoreCheck will check that the right answer wins.
 	  tag3 = await collection.store(newData, {tag: tag2});
 	  Credentials.author = user;
 	  const newSignature = await collection.retrieve(tag2);
