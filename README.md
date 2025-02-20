@@ -9,7 +9,7 @@
 - Cryptographic keys for signing and encrypting are securely held as relayable content.
 
 **Next:**
-- Show that content can be relayed (asynchronously and reltime) through multiple servers.
+- Show that content can be relayed (asynchronously and realtime) through multiple servers.
 
 ---
 

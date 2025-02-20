@@ -14,7 +14,7 @@ describe('Synchronizer', function () {
       const tag = 'testing';
       const message = 'echo';
 
-      const url = new URL(`/flexstore/requestDataChannel/${tag}`, baseURL);
+      const url = new URL(`/flexstore/requestDataChannel/test/echo/${tag}`, baseURL);
       const connection = new PromiseWebRTC({label: tag});
       const dataChannelPromise = connection.createDataChannel();
       // Send them our signals:
@@ -221,7 +221,7 @@ describe('Synchronizer', function () {
 		expect(matchedA.protectedHeader.iss).toBe(matchedB.protectedHeader.iss);
 		expect(matchedA.protectedHeader.act).toBe(winningAuthor);
 	      });
-	      /*x*/it('collections receive new data saved during sync.', async function () {
+	      it('collections receive new data saved during sync.', async function () {
 		expect((await a.collection.retrieve({tag: tag6})).text).toBe('bar');
 		expect((await b.collection.retrieve({tag: tag5})).text).toBe('foo');
 	      });
@@ -235,6 +235,18 @@ describe('Synchronizer', function () {
 	testCollection(ImmutableCollection);
 	testCollection(MutableCollection);
 	testCollection(VersionedCollection);
+	// describe('relay server', function () {
+	//   let immutableA, immutableB;
+	//   beforeAll(async function () {
+	//     immutableA = new ImmutableCollection({name: 'a'});
+	//     immutableB = new ImmutableCollection({name: 'b'});
+	//     await immutableA.store("immutable data");
+	//     await immutableA.store("immutable data 2");
+	//     await immutableB.store("immutable data");
+	//     await immutableB.store("immutable data 3");
+
+	//     await Promise.all([immutableA.synchronize(
+	// });
       });
       // TODO: VersionedCollection synchronizations:
       // - non-owner
