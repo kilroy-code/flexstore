@@ -15,22 +15,11 @@ An application may choose to offer a public registry of users or groups. Presuma
 Regardless, an app may allow a group member to send an invitation to join a group over the Internet, identifying it by pseudonymous tag. Anyone who posses this invitation would then know of the existence of the tag, and could re-share it. It is also possible to share such invitations face-to-face (e.g., by QR code).
 
 
-## Side-Channel Analysis
-
-While the content itself is secure, the existence of activity is open to anyone who has the data:
-- Activity is signed, indicating the pseudonymous tag of the user that took the action, and the time they did so.
-- Each group of keys enumerates the tags that are the constituent members of that group.
-
-An app may choose to allow humans to create multiple identities for different groups, or even multiple identities within a group. It is possible to securely demonstrate online that to a human that you are are the person identified by two or more such identities. However, this leaves a public trail of activity that can analyzed to infer a relationship between tags and to the timing of (online or offline) activity.
-
-This software allows the encrypted content and its analyzable metadata to be shared in three ways:
-1. Through public relay servers, where the metadata and the fact of the tags' existence is open to anyone.
-2. Directly from peer to peer, over the Internet. If activity is only shared in this way or the next, the signature and analyzable metadata is simply not available to others. Realtime synchronous communication requires both peers to be online at the same time, but activity can be recorded separately and then later relayed to each other over a brief connection. However, the peers must be introduced to each other through a server, and so the time and IP addresses of the connection is knowable, but nothing about the exchange itself.
-3. Directly from peer to peer on a local network (e.g., a local wifi or hotspot). Here even the time and IP address of the exchange is known only on the local network.
-
 ## Shutdown
 
 This free and open source software is designed to be used from secure Web page, including installed [PWAs](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps). While a PWA can be distributed through app stores, it can also be installed through any HTTPS site or mirror that carries it. While it is not terribly difficult to run an HTTPS site, it is not trivial either. Apps may choose to provide a public collection of current mirrors.
+
+Once someone has such an app, content can be exchanged through public relays or peers. The app can dynamically specify what collections of information it is interested in, and the relay need not be specicialized to handle it - i.e., it carries any data. One relay or peer is as good as another, as long as it has the data.
 
 An app that uses this API can share data with other apps that use this API, even if the app code is different or hosted from different mirrors.
 
@@ -71,6 +60,20 @@ Just as physical access to a device may allow a human to operate the app as if t
 - A user can sometimes be tricked into running malicious code directly, using the browser's debugging tools. Do not paste code into the browser "console".
 - Modern browser applications often include other software written by third-parties, to do specific tasks. These, in turn, often include other third-party software, and so forth. It is not uncommon for applications to be written without a full understanding of what each of these "dependencies" actually do.
 - A stand-alone application (not a browser software) can be written to use this [API](./api.md), and a user can be convinced to run it. Note: while a public relay does need _a_ key to sign certain merges, it does _not_ need access to any particular groups or secrets. Do not trust code that claims otherwise.
+
+## Side-Channel Analysis
+
+While the content itself is secure, the existence of activity is open to anyone who has the data:
+- Activity is signed, indicating the pseudonymous tag of the user that took the action, and the time they did so.
+- Each group of keys enumerates the tags that are the constituent members of that group.
+- Exchanging data with a relay or peer does allow the other software to know what data you already have in your possession. A [malicious relay](https://en.wikipedia.org/wiki/Honeypot_(computing)) might record that information.
+
+An app may choose to allow humans to create multiple identities for different groups, or even multiple identities within a group. It is possible to securely demonstrate online that to a human that you are are the person identified by two or more such identities. However, this leaves a public trail of activity that can analyzed to infer a relationship between tags and to the timing of (online or offline) activity.
+
+This software allows the encrypted content and its analyzable metadata to be shared in three ways:
+1. Through public relay servers, where the metadata and the fact of the tags' existence is open to anyone.
+2. Directly from peer to peer, over the Internet. If activity is only shared in this way or the next, the signature and analyzable metadata is simply not available to others. Realtime synchronous communication requires both peers to be online at the same time, but activity can be recorded separately and then later relayed to each other over a brief connection. However, the peers must be introduced to each other through a server, and so the time and IP addresses of the connection is knowable, but nothing about the exchange itself.
+3. Directly from peer to peer on a local network (e.g., a local wifi or hotspot). Here even the time and IP address of the exchange is known only on the local network.
 
 
 ## Claims of Priority
