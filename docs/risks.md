@@ -1,10 +1,10 @@
-# Limitations, Risks, and Mitigations
+# Security Limitations, Risks, and Mitigations
 
 [Flexstore](../README.md) allows decentralized applications to share signed and encrypted content through untrusted relays and peers -- in realtime or asynchronously.
 
 ## Exposing Content
 
-Most applications are expected to use the built in encryption so that it can only be read by the intented group. (Together with cryptographic signatures, this allows content to be [relayed](../README.md#flexstore) through untrusted devices.) Of course, once displayed, the intended group members can screenshot the content and share it.
+Most applications are expected to use the built in encryption so that it can only be read by the intended group. (Together with cryptographic signatures, this allows content to be [relayed](../README.md#flexstore) through untrusted devices.) Of course, once displayed, the intended group members can screenshot the content and share it.
 
 The current software does _not_ currently watermark encrypted content.
 
@@ -12,14 +12,14 @@ The current software does _not_ currently watermark encrypted content.
 
 An application may choose to offer a public registry of users or groups. Presumably, this would be opt-in, and that the public user or group name might be different than that used within some private group. 
 
-Regardless, an app may allow a group member to send an invitation to join a group over the Internet, identifying it by pseudonymous tag. Anyone who posses this invitation would then know of the existence of the tag, and could re-share it. It is also possible to share such invitations face-to-face (e.g., by QR code).
+Regardless, an app may allow a group member to send an invitation to join a group over the Internet, identifying it by pseudonymous tag. Anyone who possesses this invitation would then know of the existence of the tag, and could re-share it. It is also possible to share such invitations face-to-face (e.g., by QR code).
 
 
 ## Shutdown
 
-This free and open source software is designed to be used from secure Web page, including installed [PWAs](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps). While a PWA can be distributed through app stores, it can also be installed through any HTTPS site or mirror that carries it. While it is not terribly difficult to run an HTTPS site, it is not trivial either. Apps may choose to provide a public collection of current mirrors.
+This free and open source software is designed to be used from a secure Web page, including installed [PWAs](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps). While a PWA can be distributed through app stores, it can also be installed through any HTTPS site or mirror that carries it. While it is not terribly difficult to run an HTTPS site, it is not trivial either. Apps may choose to provide a public collection of current mirrors.
 
-Once someone has such an app, content can be exchanged through public relays or peers. The app can dynamically specify what collections of information it is interested in, and the relay need not be specicialized to handle it - i.e., it carries any data. One relay or peer is as good as another, as long as it has the data.
+Once someone has such an app, content can be exchanged through public relays or peers. The app can dynamically specify what collections of information it is interested in, and the relay need not be specialized to handle it - i.e., it carries any data. One relay or peer is as good as another, as long as it has the data.
 
 An app that uses this API can share data with other apps that use this API, even if the app code is different or hosted from different mirrors.
 
@@ -43,7 +43,7 @@ All content, including the users' cryptographic keys, are available from whereve
 
 If someone moves onto another device, or loses access to their device or wipes the app and local storage, they can recover their identity. A virtual device key is encrypted by the application and stored among the other keys in [relayable data](#losing-content). The application controls how the encrypting secret is obtained from the user, but best practice is to have a number of such "recovery keys" that are based on different combinations of multiple canonicalized security questions. (Mother's maiden name and the like.)
 
-These recovery keys are then used by the application to add a new local device key for the current device, and adding it to the relayable key tag for the user.
+These recovery keys are then used by the application to add a new local device key for the current device, and add it to the relayable key tag for the user.
 
 ## Stealing Keys
 
@@ -68,7 +68,7 @@ While the content itself is secure, the existence of activity is open to anyone 
 - Each group of keys enumerates the tags that are the constituent members of that group.
 - Exchanging data with a relay or peer does allow the other software to know what data you already have in your possession. A [malicious relay](https://en.wikipedia.org/wiki/Honeypot_(computing)) might record that information.
 
-An app may choose to allow humans to create multiple identities for different groups, or even multiple identities within a group. It is possible to securely demonstrate online that to a human that you are are the person identified by two or more such identities. However, this leaves a public trail of activity that can analyzed to infer a relationship between tags and to the timing of (online or offline) activity.
+An app may choose to allow humans to create multiple identities for different groups, or even multiple identities within a group. It is possible to securely demonstrate online that to a human that you are the person identified by two or more such identities. However, this leaves a public trail of activity that can be analyzed to infer a relationship between tags and to the timing of (online or offline) activity.
 
 This software allows the encrypted content and its analyzable metadata to be shared in three ways:
 1. Through public relay servers, where the metadata and the fact of the tags' existence is open to anyone.
@@ -80,18 +80,18 @@ This software allows the encrypted content and its analyzable metadata to be sha
 
 When the software accepts data from a Flexstore app or relayed from another device, it will reject ImmutableCollection items that have different content (i.e, which hashes to something other than the tag under which it stored) or a different owner. In other words, immutable content cannot be changed.
 
-However, the signature being stored can be a different author and timestamp than what the system already has stored. The one with earlier timestamp is the one that will be used. This might conceivably be misinterpreted as showing who was the first to create the item, and what time they did so. This interpretation is wrong in several ways.
+However, the signature being stored can be a different author and timestamp than what the system already has stored. The one with the earlier timestamp is the one that will be used. This might conceivably be misinterpreted as showing who was the first to create the item, and what time they did so. This interpretation is wrong in several ways.
 
-First, the content could have been created by anyone, and merely copied into the system by the claimant. The mitigation is that the person introducing the data is are irrupudiably signing that they have the right to use the content.
+First, the content could have been created by anyone, and merely copied into the system by the claimant. The mitigation is that the person introducing the data is irrepudiably signing that they have the right to use the content.
 
-Second, on a centralized server, there is no way to know or control whose packet will arrive first when two people make an entry at the "same" time. This window is arbitrarilly longer when relays are involved, as there can be considerable clock differences between people who are creating records while offline and merging them later on.
+Second, on a centralized server, there is no way to know or control whose packet will arrive first when two people make an entry at the "same" time. This window is arbitrarily longer when relays are involved, as there can be considerable clock differences between people who are creating records while offline and merging them later on.
 
 Finally, someone could try to make a claim of priority by setting their device clock backward and creating an entry. 
 
 1. If this possibility creates an issue for an application, it should create records that include a signed entry from a trusted [timeserver](https://en.wikipedia.org/wiki/ANSI_ASC_X9.95_Standard). Alas, such timestamping requires that the client be online, and some uses of our software might involve offline use.
-2. Even offline use can create linked entries, such that separate items are definitely signed before the next item that links back to it. Two independent, offline branches can both be cited by a merging link, such that both antecedent branches definitely occured before the merged branch that cites them.
+2. Even offline use can create linked entries, such that separate items are definitely signed before the next item that links back to it. Two independent, offline branches can both be cited by a merging link, such that both antecedent branches definitely occurred before the merged branch that cites them.
 3. The app can also use a VersionedCollection instead of an ImmutableCollection, in which ALL the claims are retained rather than just the first. This does three things:
    a. It retains all the immutable versions, rather than just the earliest or the latest. Then each version can be examined and the "true" originator may be adjudicated by humans.
    b. The VersionedCollection protocol is designed in such a way that merging verifies the linked history of each branch (technique 2), and keeps these results for later examination.
-   c. In future versions, IFF the merge happens to be done online, a trusted timeserver signature will be added to the merge result, providing a reliable upper bound on when the previous items occured.
+   c. In future versions, IFF the merge happens to be done online, a trusted timeserver signature will be added to the merge result, providing a reliable upper bound on when the previous items occurred.
 
