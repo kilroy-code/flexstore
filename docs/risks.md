@@ -56,19 +56,19 @@ The NodeJS server implementation of this software does not use a separate browsi
 ## Malicious Software
 
 Just as physical access to a device may allow a human to operate the app as if they were the authorized user, malicious software may be introduced into an application to ["operate" it programmatically](https://en.wikipedia.org/wiki/Confused_deputy_problem). There are several ways this can happen:
-- Most browsers allow third-party "extensions" to be installed into the browser. These can read every page visited, including PWAs, and inject software into the app unseen. Do not use browser extensions!
+- Most browsers allow third-party "extensions" to be installed into the browser. These can read every page visited, including PWAs, and inject software into the app unseen. 
 - A user can sometimes be tricked into running malicious code directly, using the browser's debugging tools. Do not paste code into the browser "console".
 - Modern browser applications often include other software written by third-parties, to do specific tasks. These, in turn, often include other third-party software, and so forth. It is not uncommon for applications to be written without a full understanding of what each of these "dependencies" actually do.
-- A stand-alone application (not a browser software) can be written to use this [API](./api.md), and a user can be convinced to run it. Note: while a public relay does need _a_ key to sign certain merges, it does _not_ need access to any particular groups or secrets. Do not trust code that claims otherwise.
+- A stand-alone application (not a browser software) can be written to use this [API](./api.md), and a user can be convinced to run it. Note: while a public relay does need _a_ key to sign certain merges, it does _not_ need access to any particular groups or secrets.
 
 ## Side-Channel Analysis
 
-While the content itself is secure, the existence of activity is open to anyone who has the data:
+While the content itself is secure, [the mere existence of activity is open to anyone who has a copy](https://en.wikipedia.org/wiki/Side-channel_attack):
 - Activity is signed, indicating the pseudonymous tag of the user that took the action, and the time they did so.
 - Each group of keys enumerates the tags that are the constituent members of that group.
-- Exchanging data with a relay or peer does allow the other software to know what data you already have in your possession. A [malicious relay](https://en.wikipedia.org/wiki/Honeypot_(computing)) might record that information.
+- Exchanging data with a relay or peer does allow the other software to know what collections of data you are interested in, and the tags of the items that you already have in your possession. A [malicious relay](https://en.wikipedia.org/wiki/Honeypot_(computing)) might record that information.
 
-An app may choose to allow humans to create multiple identities for different groups, or even multiple identities within a group. It is possible to securely demonstrate online that to a human that you are the person identified by two or more such identities. However, this leaves a public trail of activity that can be analyzed to infer a relationship between tags and to the timing of (online or offline) activity.
+An app may choose to allow humans to create multiple identities for different groups, or even multiple identities within a group. It is possible to securely demonstrate to a human that you are the person identified by two or more such identities. However, this leaves a public trail of activity that can be analyzed to infer a relationship between tags and to the timing of (online or offline) activity.
 
 This software allows the encrypted content and its analyzable metadata to be shared in three ways:
 1. Through public relay servers, where the metadata and the fact of the tags' existence is open to anyone.
