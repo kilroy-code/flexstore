@@ -1,5 +1,7 @@
 # Limitations, Risks, and Mitigations
 
+[Flexstore](../README.md) allows decentralized applications to share signed and encrypted content through untrusted relays and peers -- in realtime or asynchronously.
+
 ## Exposing Content
 
 Most applications are expected to use the built in encryption so that it can only be read by the intented group. (Together with cryptographic signatures, this allows content to be [relayed](../README.md#flexstore) through untrusted devices.) Of course, once displayed, the intended group members can screenshot the content and share it.
