@@ -1,14 +1,17 @@
 # Flexstore
 
-## status 
-### Done: 
-Tests [here](./tree/main/spec) and [there](/kilroy-code/distributed-security/tree/main/spec) show that:
+**STATUS**
+
+**Done:** Tests [here](https://github.com/kilroy-code/flexstore/tree/main/spec) and [there](https://github.com/kilroy-code/distributed-security/tree/main/spec) show that:
 - Content is signed and encrypted for its owning group.
 - Content is persisted locally and shared in real time (i.e., "pushed") with any peer to which you are connected.
 - Content can be securely relayed through untrusted peers, either asynchronously or in real time.
 - Cryptographic keys for signing and encrypting are securely held as relayable content.
-### Next
+
+**Next:**
 - Show that content can be relayed (asynchronously and reltime) through multiple servers.
+
+---
 
 Flexstore lets you easily and safely set up a key-value JSON collection in an app, which _also_ lets you work offline, federate the storage across relay servers, and even p2p between browser clients:
 
@@ -25,7 +28,7 @@ It is a very simple (and secure!) way to have shared, authenticated, live data i
 
 This package works in browsers and in NodeJS. However, the documented, standards-based protocol can be implemented in any implementation that supports the underlying [JWS](https://datatracker.ietf.org/doc/html/rfc7515) and [JWE](https://www.rfc-editor.org/rfc/rfc7516), and web transports. (The current version supports HTTPS REST, and peer/realtime push through [WRTC](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API) [data channels](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Using_data_channels). Future implementations are likely to also support websockets for realtime push, and allow automatic archiving of older data that gets pulled in from a relay server on-demand.)
 
-See also the [API](./tree/main/doc/api.md) (under construction) and the [Limitations, Risks and Mitigations](./tree/main/doc/risks.md).
+See also the [API](https://github.com/kilroy-code/flexstore/blob/main/docs/api.md) (under construction) and the [Limitations, Risks and Mitigations](https://github.com/kilroy-code/flexstore/blob/main/docs/risks.md).
 
 ## Installation
 

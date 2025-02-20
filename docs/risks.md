@@ -17,13 +17,13 @@ Regardless, an app may allow a group member to send an invitation to join a grou
 
 While the content itself is secure, the existence of activity is open to anyone who has the data:
 - Activity is signed, indicating the pseudonymous tag of the user that took the action, and the time they did so.
-- Each group of keys enumerates the psuudonymous tags that are the constituent members of that group.
+- Each group of keys enumerates the tags that are the constituent members of that group.
 
-An app may choose to allow humans to create multiple identities for different groups, or even multiple identities within a group. It is possible to securely demonstrate online that to a human that you are are the person identified by two or more such identities. However, this leaves a public trail of activity that can analyzed.
+An app may choose to allow humans to create multiple identities for different groups, or even multiple identities within a group. It is possible to securely demonstrate online that to a human that you are are the person identified by two or more such identities. However, this leaves a public trail of activity that can analyzed to infer a relationship between tags and to the timing of (online or offline) activity.
 
 This software allows the encrypted content and its analyzable metadata to be shared in three ways:
-1. Through public relay servers, where the metadata and the fact of the tags' existence is open to anyeone.
-2. Directly from peer to peer, over the Internet. If activity is only shared in this way or the next, the signature and analyzable metadata is simply not available to others. Realtime synchronous communication requires both peers to be online at the same time, but activity can be recorded separately and then relayed to each other over a brief connection. However, the peers must be introduced to each other through a server, and so the time and IP addresses of the connection is knowable, but nothing about the exchange itself. 
+1. Through public relay servers, where the metadata and the fact of the tags' existence is open to anyone.
+2. Directly from peer to peer, over the Internet. If activity is only shared in this way or the next, the signature and analyzable metadata is simply not available to others. Realtime synchronous communication requires both peers to be online at the same time, but activity can be recorded separately and then later relayed to each other over a brief connection. However, the peers must be introduced to each other through a server, and so the time and IP addresses of the connection is knowable, but nothing about the exchange itself.
 3. Directly from peer to peer on a local network (e.g., a local wifi or hotspot). Here even the time and IP address of the exchange is known only on the local network.
 
 ## Shutdown
@@ -42,8 +42,7 @@ The cryptographic keys used for signing and decryption are secured by unique key
 - A pin, passphrase, or other secret that must be entered to locally unlock the local keys (in addition to the access controls provided by the device itself).
 - A panic button that deletes the local keys or the whole app and its storage. (See [Losing Keys](#loosing-keys), below.) The current software does _not_ use a delete that overwrites the keys with junk data.
 
-Note that browsers have debugging tools require either physical access or certain permissioned access. See [Stealing Keys](#stealing-keys) and [Malicious Software](#malicious-software).
-
+Note that browsers have debugging tools that require either physical access or certain permissioned access. See [Stealing Keys](#stealing-keys) and [Malicious Software](#malicious-software). However, keys and other encrypted content are never stored unencrypted.
 
 ## Losing Content
 
@@ -51,9 +50,9 @@ All content, including the users' cryptographic keys, are available from whereve
 
 ## Losing Keys
 
-If someone loses access to their device or wipes the app and local storage, they can recover their identity from another device. A virtual device key is encrypted by the application and stored among the other keys in [relayable data](#losing-content). The application controls how the encrypting secret is obtained from the user, but best practice is to have a number of such "recovery keys" that are based on different combinations of multiple canonicalized security questions. (Mother's maiden name and the like.)
+If someone moves onto another device, or loses access to their device or wipes the app and local storage, they can recover their identity. A virtual device key is encrypted by the application and stored among the other keys in [relayable data](#losing-content). The application controls how the encrypting secret is obtained from the user, but best practice is to have a number of such "recovery keys" that are based on different combinations of multiple canonicalized security questions. (Mother's maiden name and the like.)
 
-These recovery keys are then used by the application to add a new local device key for the current device, and adding it to the relable key tag for the user.
+These recovery keys are then used by the application to add a new local device key for the current device, and adding it to the relayable key tag for the user.
 
 ## Stealing Keys
 
