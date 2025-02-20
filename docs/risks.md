@@ -61,16 +61,16 @@ Just as physical access to a device may allow a human to operate the app as if t
 - Modern browser applications often include other software written by third-parties, to do specific tasks. These, in turn, often include other third-party software, and so forth. It is not uncommon for applications to be written without a full understanding of what each of these "dependencies" actually do.
 - A stand-alone application (not a browser software) can be written to use this [API](./api.md), and a user can be convinced to run it. Note: while a public relay does need _a_ key to sign certain merges, it does _not_ need access to any particular groups or secrets.
 
-## Side-Channel Analysis
+## Metadata Analysis
 
-While the content itself is secure, [the mere existence of activity is open to anyone who has a copy](https://en.wikipedia.org/wiki/Side-channel_attack):
+While the content itself is secure, the mere existence of activity is open to anyone who has a copy. Various [metadata](https://en.wikipedia.org/wiki/Metadata) is available for [analysis](https://en.wikipedia.org/wiki/Traffic_analysis):
 - Activity is signed, indicating the pseudonymous tag of the user that took the action, and the time they did so.
 - Each group of keys enumerates the tags that are the constituent members of that group.
 - Exchanging data with a relay or peer does allow the other software to know what collections of data you are interested in, and the tags of the items that you already have in your possession. A [malicious relay](https://en.wikipedia.org/wiki/Honeypot_(computing)) might record that information.
 
-An app may choose to allow humans to create multiple identities for different groups, or even multiple identities within a group. It is possible to securely demonstrate to a human that you are the person identified by two or more such identities. However, this leaves a public trail of activity that can be analyzed to infer a relationship between tags and to the timing of (online or offline) activity.
+An app may choose to allow humans to create multiple identities for different groups, or even multiple identities within a group. It is possible to securely demonstrate to a human that you are the person identified by two or more such identities. However, this still leaves a public trail of activity that can be analyzed to infer a relationship between tags and to the timing of (online or offline) activity.
 
-This software allows the encrypted content and its analyzable metadata to be shared in three ways:
+This software allows the encrypted content and its analyzable metadata to be shared in three ways. In order of increasing privacy:
 1. Through public relay servers, where the metadata and the fact of the tags' existence is open to anyone.
 2. Directly from peer to peer, over the Internet. If activity is only shared in this way or the next, the signature and analyzable metadata is simply not available to others. Realtime synchronous communication requires both peers to be online at the same time, but activity can be recorded separately and then later relayed to each other over a brief connection. However, the peers must be introduced to each other through a server, and so the time and IP addresses of the connection is knowable, but nothing about the exchange itself.
 3. Directly from peer to peer on a local network (e.g., a local wifi or hotspot). Here even the time and IP address of the exchange is known only on the local network.
