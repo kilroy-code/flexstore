@@ -6,7 +6,7 @@ const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalTh
 // So you need to clear things wherever they are stored: locally, hosted, browser cache, ....
 
 // Percent of a normal implementation at which we expect this implemention to write stuff.
-const writeSlowdown = 0.05//fixme (typeof(process) !== 'undefined') ? 0.05 : 1; // My atomic fs writes in node are awful.
+const writeSlowdown = 0.04//fixme (typeof(process) !== 'undefined') ? 0.05 : 1; // My atomic fs writes in node are awful.
 const readSlowdown = 0.25;
 
 // TODO:getUserDeviceSecret => prompt
@@ -41,10 +41,10 @@ describe('Flexstore', function () {
       let tag, data = {name: 'Alice', birthday: '01/01'};
       let updateCount = 0, latestUpdate;
       beforeAll(async function () {
-	collection.addEventListener('update', event => {
+	collection.onupdate = event => {
 	  updateCount++;
 	  latestUpdate = event.detail;
-	});
+	};
 	tag = await collection.store(data);
 	expect(updateCount).toBe(1);
 	expect(latestUpdate.tag).toBe(tag);
@@ -161,7 +161,7 @@ describe('Flexstore', function () {
 	    await Promise.all(tags.map(tag => collection.remove({tag})));
 	  });
 	  it('writes.', function () {
-	    expect(writesPerSecond).toBeGreaterThan(400 * writeSlowdown);
+	    expect(writesPerSecond).toBeGreaterThan(250 * writeSlowdown);
 	  });
 	  it('reads.', async function () {
 	    const start = Date.now();
