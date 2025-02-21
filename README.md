@@ -1,34 +1,19 @@
 # Flexstore
 
-**STATUS**
-
-**Done:** Tests [here](https://github.com/kilroy-code/flexstore/tree/main/spec) and [there](https://github.com/kilroy-code/distributed-security/tree/main/spec) show that:
-- Content is signed and encrypted for its owning group.
-- Content is persisted locally and shared in real time (i.e., "pushed") with any peer to which you are connected.
-- Content can be securely relayed through untrusted peers, either asynchronously or in real time.
-- Cryptographic keys for signing and encrypting are securely held as relayable content.
-
-**Next:**
-- Show that content can be relayed (asynchronously and realtime) through multiple servers.
-
----
-
 Flexstore lets you easily and safely set up a key-value JSON collection in an app, which _also_ lets you work offline, federate the storage across relay servers, and even p2p between browser clients:
 
-1. Each collection can be independently and dynamically connected to any number of peer clients or relay servers. While connected, all changes are automatically shared in realtime (even as full replication of the collection continues in the background).
-2. Each collection can later be synchronized with any number of peer clients or relay servers, with the collection automatically merged and reconciled.
+1. Applications create uniquely named instances of collections, which have methods to `store`, `retrieve`, or `remove` items of the collection. Collections can be instantiated whenever needed, and there is no schema to define or propagate.
+2. Each collection can be individually connected or disconnected at any time with the same-named collection in zero or more other app instances. The other end can be peer clients or servers, in the same or different software. While connected, the collection data is synchronized with each of the connections. (E.g, a `retrieve` produces the current data as produced in any connection.) The collection will receive an `update` event when an item in the collection is changed by the local app or by any connection. Different collections can be connected to different devices. If connected long enough (which isn't long), both sides will have a complete merged copy of the collection.
+3. Read access is controlled by automatically encrypting the data (in the client), such that it can only be read by members of a specified "audience" group.
+4. Write access is controlled by a cryptographic signature that proves that the writer is in the authorized group of item "owners". 
+5. The cryptographic keys are encrypted and stored in a collection within the system itself. The membership of an audience or owner group can be updated by the group owners at any time, and there is no need to re-sign or re-encrypt the referencing items.
 
-The relays (whether servers or clients) do not need to cooperate with or know anything about your app.
+It is a very simple way to have shared, secure, decentralized, privacy-preserving, live data in an app that automatically works online or offline.
 
-It is a very simple (and secure!) way to have shared, authenticated, live data in an app that works online or offline:
-
-- Everything is signed so that wherever the data is stored, you can be sure who saved it and that it has not since been modified.
-- Data is optionally encrypted, so that it can  be read only by the intended audience.
-- The cryptographic keys are safely stored in the system itself (signed and encrypted) so that they are available from the cloud to your users' devices. The keys are user-managed, and there are no custodial copies -- i.e., even you do not have access.
-
-This package works in browsers and in NodeJS. However, the documented, standards-based protocol can be implemented in any implementation that supports the underlying [JWS](https://datatracker.ietf.org/doc/html/rfc7515) and [JWE](https://www.rfc-editor.org/rfc/rfc7516), and web transports. (The current version supports HTTPS REST, and peer/realtime push through [WRTC](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API) [data channels](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Using_data_channels). Future implementations are likely to also support websockets for realtime push, and allow automatic archiving of older data that gets pulled in from a relay server on-demand.)
+This package works in browsers and in NodeJS. However, the documented, standards-based protocol can be implemented in any implementation that supports the underlying [JWS](https://datatracker.ietf.org/doc/html/rfc7515) and [JWE](https://www.rfc-editor.org/rfc/rfc7516), and web transports. (The current version supports HTTPS REST, and peer/realtime push through [WRTC](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API) [data channels](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Using_data_channels). Future implementations are likely to also support websockets for realtime push, and allow automatic archiving of older data that will be pulled in on-demand from a relay server.)
 
 See also the [API](https://github.com/kilroy-code/flexstore/blob/main/docs/api.md) (under construction) and the [Limitations, Risks and Mitigations](https://github.com/kilroy-code/flexstore/blob/main/docs/risks.md).
+
 
 ## Installation
 
@@ -47,7 +32,6 @@ flexstore includes @ki1r0y/distributed-security as a dependency, which provides 
 import { Credentials, MutableCollection, ImmutableCollection, VersionedCollection } 
    from '@ki1r0y/flexstore';
 
-// An app can have several Collections, with different sets of online services.
 const services = ['/', 'https://sharedCloud.org/flex/'];
 
 // Start synchronizing the app's collections with each of the reachable services.
@@ -79,7 +63,6 @@ Apps do not have to stay synchronized. One can also just exchange data, which in
 ```
 const peerSession = "some agreed upon name that does not start with http, /, or ./";
 await messages.synchronize(peerSession);
-users.disconnect(peerSession);
 ```
 
 ### Operations:
@@ -89,27 +72,24 @@ Credentials.author = currentUser; // Must be given to each store(), or set here 
 
 const myData = {name: 'Alice', birthday: '01/01'};
 await users.store(myData, currentUser);
-const allUsers = await users.list();
+const allUsers = await users.list(); // Includes  currentUser.
 
-function groupChanged(signature, tag) {
-  console.log(`Group tag ${tag} updated to ${signature.json} at ${new Date(signature.time)}`);
+function groupChanged(event) {
+  const {tag, json, time} = event.details;
+  console.log(`Group tag ${tag} updated to ${json} at ${new Date(time)}`);
 }
 // Above prints raw group json and group tag - a 132-byte base64 string.
 // A more realistic example might read the referenced data:
-function newMessage(messageSignature, tag) {
-  const messageData = messageSignature.json; // Can also be .text or binary .payload.
-  const mediaSignature = await media.retieve(messagageData.attachment);
-  const senderSignature = await users.retrieve(messageSignature.author);
-  const groupSignature = await groups.retieve(messageSignature.owner);
-  appSpecificUpdateMessageDisplay(messageSignature.text, 
-                                  senderSignature.json.name, 
-                                  groupSignature.json.name
-                                  mediaData.payload);
+function newMessage(event) {
+  const {author, owner, text} = event.details;
+  const senderData = await users.retrieve(author);
+  const groupData = await groups.retieve(owner);
+  appSpecificUpdateMessageDisplay(text, senderData.json.name, groupData.json.name);
 }
 ```
 
 
-### Write Permissions
+### Read and Write Permissions
 
 In the operations above, only the `Credentials.author` has beeen set, and not a `Credentials.owner`. In this case, only the author will be able to `store()` new data or `remove()` it (for any mutable collection).
 
@@ -117,7 +97,8 @@ We can arrange for any one of an enumerated team of users to be able to make cha
 
 ```
 const teamAlice = Credentials.create(currentUser, someOtherUserTag, yetAnotherUserTag);
-Credentials.owner = teamAlice; // New items stored will be readable only by teamAlice.
+Credentials.owner = teamAlice; // New items stored will be writable only by teamAlice.
+Credentials.audience = teamAlice; // New items stored will by readable only by teamAlice.
 // teamAlice membership can be changed later, without effecting signatures/encryption!
 
 // We can use this tag in other data, and as tags in MutableCollections.
@@ -130,18 +111,6 @@ await users.store(data: userData, tag: currentUser, owner: currentUser});//overr
 
 A user can be on any number of owner teams, and teams can have other teams as members. In a distributed system (and arguably in all systems), this way of specifying ownership is more flexible than trying to maintain a set of "write permissions" via an access control list. 
 
-
-### Encryption
- 
-We can also arrange for only the members of a tag to be able to _read_ the data. This is done by encrypting the data on the client before it is signed, and decrypting it on the client after it is verfied. 
-
-```
-store({data, encryption: true}); // For owner (or default author).
-store({data, encryption: tag}); // Members of tag can read.
-// The Credentials.author does NOT have be a members of tag to write, only to read!
-
-Credentials.encryption = true; // Set up a default for above.
-```
 
 ### Credentials Setup
 
