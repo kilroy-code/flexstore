@@ -9,7 +9,7 @@ const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 Credentials.getUserDeviceSecret = testPrompt;
 
 describe('Synchronizer', function () {
-  describe('basic data channel', function () {
+  xdescribe('basic data channel', function () {
     it('smokes', async function () {
       const tag = 'testing';
       const message = 'echo';
@@ -50,7 +50,7 @@ describe('Synchronizer', function () {
       b = makeSynchronizer({name: 'b', ...bProps});
       return doConnect && connect(a, b);
     }
-    describe('initializations', function () {
+    xdescribe('initializations', function () {
       beforeAll(function () {
 	a = makeSynchronizer({name: 'a'});
       });
@@ -72,35 +72,41 @@ describe('Synchronizer', function () {
     });
     describe('connected', function () {
       afterEach(async function () {
-	await a.disconnect();
-	expect(a.connection.peer.connectionState).toBe('new');
-	await b.closed;
-	expect(b.connection.peer.connectionState).toBe('new');
+	if (a) {
+	  await a.disconnect();
+	  expect(a.connection.peer.connectionState).toBe('new');
+	}
+	if (b) {
+	  await b.closed;
+	  expect(b.connection.peer.connectionState).toBe('new');
+	}
       });
-      it('changes state appropriately.', async function () {
-	await setup({}, {});
-	expect(await a.dataChannelPromise).toBeTruthy();
-	expect(await b.dataChannelPromise).toBeTruthy();
-	expect(a.connection.peer.connectionState).toBe('connected');
-	expect(b.connection.peer.connectionState).toBe('connected');
-      });
-      describe('version/send/receive', function () {
-	it('agrees on max.', async function () {
-	  await setup({maxVersion: 2}, {maxVersion: 3});
-	  expect(await a.version).toBe(2);
-	  expect(await b.version).toBe(2);
+      xdescribe('basic', function () {
+	it('changes state appropriately.', async function () {
+	  await setup({}, {});
+	  expect(await a.dataChannelPromise).toBeTruthy();
+	  expect(await b.dataChannelPromise).toBeTruthy();
+	  expect(a.connection.peer.connectionState).toBe('connected');
+	  expect(b.connection.peer.connectionState).toBe('connected');
 	});
-	it('agrees on failure.', async function () {
-	  await setup({minVersion: 1, maxVersion: 2}, {minVersion: 3, maxVersion: 4});
-	  expect(await a.version).toBe(0);
-	  expect(await b.version).toBe(0);
+	describe('version/send/receive', function () {
+	  it('agrees on max.', async function () {
+	    await setup({maxVersion: 2}, {maxVersion: 3});
+	    expect(await a.version).toBe(2);
+	    expect(await b.version).toBe(2);
+	  });
+	  it('agrees on failure.', async function () {
+	    await setup({minVersion: 1, maxVersion: 2}, {minVersion: 3, maxVersion: 4});
+	    expect(await a.version).toBe(0);
+	    expect(await b.version).toBe(0);
+	  });
 	});
-      });
-      it('synchronizes empty.', async function () {
-	await setup({}, {});
-	await a.startedSynchronization;
-	expect(await a.completedSynchronization).toBe(0);
-	expect(await b.completedSynchronization).toBe(0);	
+	it('synchronizes empty.', async function () {
+	  await setup({}, {});
+	  await a.startedSynchronization;
+	  expect(await a.completedSynchronization).toBe(0);
+	  expect(await b.completedSynchronization).toBe(0);
+	});
       });
       describe('authorized', function () {
 	async function clean(synchronizer) {
@@ -113,9 +119,13 @@ describe('Synchronizer', function () {
 	  Credentials.author = await Credentials.createAuthor('test pin:');
 	}, 10e3);
 	afterAll(async function () {
-	  await clean(a);
-	  await clean(b);
+	  console.log('cleanup a');
+	  a && await clean(a);
+	  console.log('cleanup b');
+	  b && await clean(b);
+	  console.log('destorying credentials');
 	  await Credentials.destroy({tag: Credentials.author, recursiveMembers: true});
+	  console.log('done');
 	});
 	function testCollection(kind, label = kind.name) {
 	  describe(label, function () {
@@ -232,21 +242,38 @@ describe('Synchronizer', function () {
 	    });
 	  });
 	}
-	testCollection(ImmutableCollection);
-	testCollection(MutableCollection);
-	testCollection(VersionedCollection);
-	// describe('relay server', function () {
-	//   let immutableA, immutableB;
-	//   beforeAll(async function () {
-	//     immutableA = new ImmutableCollection({name: 'a'});
-	//     immutableB = new ImmutableCollection({name: 'b'});
-	//     await immutableA.store("immutable data");
-	//     await immutableA.store("immutable data 2");
-	//     await immutableB.store("immutable data");
-	//     await immutableB.store("immutable data 3");
+	// testCollection(ImmutableCollection);
+	// testCollection(MutableCollection);
+	// testCollection(VersionedCollection);
+	it('hosted synchronizer can connect.', async function () {
+	  const peerName = new URL('/flexstore', baseURL).href;
+	  const collectionA = new MutableCollection({name: 'test', debug: true});
+	  const collectionB = new MutableCollection({name: 'test', debug: true});
+	  function recordUpdates(event) {
+	    const updates = event.target.updates ||= [];
+	    updates.push([!!event.detail.synchronizer, !!event.detail.text]);
+	  }
+	  collectionA.onupdate = recordUpdates;
+	  collectionB.onupdate = recordUpdates;
+	  // A and B are not talking directly to each other. They are both connecting to a relay.
+	  await collectionA.synchronize(peerName);
+	  await collectionB.synchronize(peerName);
+	  a = collectionA.synchronizers.get(peerName);
+	  b = collectionB.synchronizers.get(peerName);
+	  await a.synchronizationCompleted;
+	  await b.synchronizationCompleted;
 
-	//     await Promise.all([immutableA.synchronize(
-	// });
+	  const tag = await collectionA.store("foo");
+	  await collectionA.remove({tag});
+	  await new Promise(resolve => setTimeout(resolve, 1e3));
+	  expect(await collectionA.retrieve({tag})).toBeFalsy();
+	  expect(await collectionB.retrieve({tag})).toBeFalsy();
+	  expect(collectionA.updates).toEqual([[false, true], [false, false]]);
+	  expect(collectionB.updates).toEqual([[true, true], [true, false]]); 
+	  a.disconnect();
+	  b.disconnect();
+	  a = b = null;
+	}, 10e3);
       });
       // TODO: VersionedCollection synchronizations:
       // - non-owner

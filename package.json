@@ -31,6 +31,7 @@
   "homepage": "https://github.com/kilroy-code/flexstore#readme",
   "dependencies": {
     "node-pre-gyp": "^0.17.0",
+    "uuid4": "^2.0.3",
     "wrtc": "^0.4.7"
   },
   "devDependencies": {
