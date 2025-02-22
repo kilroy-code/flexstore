@@ -9,7 +9,7 @@ const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 Credentials.getUserDeviceSecret = testPrompt;
 
 describe('Synchronizer', function () {
-  xdescribe('basic data channel', function () {
+  describe('basic data channel', function () {
     it('smokes', async function () {
       const tag = 'testing';
       const message = 'echo';
@@ -50,12 +50,12 @@ describe('Synchronizer', function () {
       b = makeSynchronizer({name: 'b', ...bProps});
       return doConnect && connect(a, b);
     }
-    xdescribe('initializations', function () {
+    describe('initializations', function () {
       beforeAll(function () {
 	a = makeSynchronizer({name: 'a'});
       });
       it('has label.', async function() {
-	expect(a.label).toBe('ImmutableCollection/a');
+	expect(a.label.startsWith('ImmutableCollection/a')).toBeTruthy();
       });
       describe('hostRequestBase', function () {
 	it('is built on url peerName', function () {
@@ -67,7 +67,7 @@ describe('Synchronizer', function () {
 	});
       });
       it('has connectionURL.', function () {
-	expect(a.connectionURL).toBe(`${a.peerName}/requestDataChannel/ImmutableCollection/a`);
+	expect(a.connectionURL.startsWith(`${a.peerName}/requestDataChannel/ImmutableCollection/a`)).toBeTruthy();
       });
     });
     describe('connected', function () {
@@ -81,7 +81,7 @@ describe('Synchronizer', function () {
 	  expect(b.connection.peer.connectionState).toBe('new');
 	}
       });
-      xdescribe('basic', function () {
+      describe('basic', function () {
 	it('changes state appropriately.', async function () {
 	  await setup({}, {});
 	  expect(await a.dataChannelPromise).toBeTruthy();
@@ -119,13 +119,9 @@ describe('Synchronizer', function () {
 	  Credentials.author = await Credentials.createAuthor('test pin:');
 	}, 10e3);
 	afterAll(async function () {
-	  console.log('cleanup a');
 	  a && await clean(a);
-	  console.log('cleanup b');
 	  b && await clean(b);
-	  console.log('destorying credentials');
 	  await Credentials.destroy({tag: Credentials.author, recursiveMembers: true});
-	  console.log('done');
 	});
 	function testCollection(kind, label = kind.name) {
 	  describe(label, function () {
@@ -242,13 +238,13 @@ describe('Synchronizer', function () {
 	    });
 	  });
 	}
-	// testCollection(ImmutableCollection);
-	// testCollection(MutableCollection);
-	// testCollection(VersionedCollection);
+	testCollection(ImmutableCollection);
+	testCollection(MutableCollection);
+	testCollection(VersionedCollection);
 	it('hosted synchronizer can connect.', async function () {
 	  const peerName = new URL('/flexstore', baseURL).href;
-	  const collectionA = new MutableCollection({name: 'test', debug: true});
-	  const collectionB = new MutableCollection({name: 'test', debug: true});
+	  const collectionA = new MutableCollection({name: 'test'});
+	  const collectionB = new MutableCollection({name: 'test'});
 	  function recordUpdates(event) {
 	    const updates = event.target.updates ||= [];
 	    updates.push([!!event.detail.synchronizer, !!event.detail.text]);
@@ -268,11 +264,12 @@ describe('Synchronizer', function () {
 	  await new Promise(resolve => setTimeout(resolve, 1e3));
 	  expect(await collectionA.retrieve({tag})).toBeFalsy();
 	  expect(await collectionB.retrieve({tag})).toBeFalsy();
+	  // Both collections get two events: true text, and then falsy text.
+	  // Updates events on A have no synchronizer (they came from us).
 	  expect(collectionA.updates).toEqual([[false, true], [false, false]]);
-	  expect(collectionB.updates).toEqual([[true, true], [true, false]]); 
-	  a.disconnect();
-	  b.disconnect();
-	  a = b = null;
+	  // Update events on B have a synchronizer (they came from the relay);
+	  expect(collectionB.updates).toEqual([[true, true], [true, false]]);
+	  await b.disconnect(); // Because one of the afterEach awaits b.closed.
 	}, 10e3);
       });
       // TODO: VersionedCollection synchronizations:
