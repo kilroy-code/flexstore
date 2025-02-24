@@ -1,6 +1,6 @@
 # Flexstore
 
-Flexstore lets you easily and safely set up a key-value JSON collection in an app, which _also_ lets you work offline, federate the storage across relay servers, and even p2p between browser clients:
+“Flexstore" lets an app easily and safely set up a key-value JSON collection, which also lets the app work offline, federate the storage across relay servers, and even p2p between browser clients:
 
 1. Applications create uniquely named instances of collections, which have methods to `store`, `retrieve`, or `remove` items of the collection. Collections can be instantiated whenever needed, and there is no schema to define or propagate.
 2. Each collection can be individually connected or disconnected at any time with the same-named collection in zero or more other app instances. The other end can be peer clients or servers, in the same or different software. While connected, the collection data is synchronized with each of the connections. (E.g, a `retrieve` produces the current data as produced in any connection.) The collection will receive an `update` event when an item in the collection is changed by the local app or by any connection. Different collections can be connected to different devices. If connected long enough (which isn't long), both sides will have a complete merged copy of the collection.
