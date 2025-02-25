@@ -35,12 +35,14 @@ describe('Flexstore', function () {
   it('initializes credentials.', function () {
     expect(user && otherUser && team && randomUser).toBeTruthy();
   });
-  function testCollection(collection, restoreCheck) {
-    const label = collection.constructor.name;
+  function testCollection(collectionType, restoreCheck) {
+    let collection;
+    const label = collectionType.name;
     describe(label, function () {
       let tag, data = {name: 'Alice', birthday: '01/01'};
       let updateCount = 0, latestUpdate;
       beforeAll(async function () {
+	collection = new collectionType({name: 'com.acme' + label, services});
 	collection.onupdate = event => {
 	  updateCount++;
 	  latestUpdate = event.detail;
@@ -175,7 +177,7 @@ describe('Flexstore', function () {
       });
     });
   }
-  testCollection(new ImmutableCollection({name: 'com.acme.immutable', services}),
+  testCollection(ImmutableCollection,
 		 // TODO: store stamped earlier than existing should work.
 		 // TODO: delete after written whould work.
 		 // TODO: store after delete should work.
@@ -189,13 +191,13 @@ describe('Flexstore', function () {
 		   expect(anotherSig.json).toEqual(newData);
 		   expect(anotherSig.protectedHeader.act).toBe(otherUser);
 		 });
-  testCollection(new MutableCollection({name: 'com.acme.mutable', services}),
+  testCollection(MutableCollection,
 		 (firstData, newData, signature, firstTag, newTag) => {
 		   expect(firstTag).toBe(newTag);
 		   expect(signature.json).toEqual(newData);
 		   expect(signature.protectedHeader.act).toBe(otherUser);
 		 });
-  testCollection(new VersionedCollection({name: 'com.acme.versioned', services}),
+  testCollection(VersionedCollection,
 		 // TODO: various cases.
 		 async (firstData, newData, signature, firstTag, newTag, collection) => {
 		   expect(firstTag).toBe(newTag);

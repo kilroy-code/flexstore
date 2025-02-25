@@ -117,7 +117,6 @@ describe('Synchronizer', function () {
 	}
 	beforeAll(async function () {
 	  Credentials.author = await Credentials.createAuthor('test pin:');
-	  console.log('set Credentials.author', Credentials.author);
 	}, 10e3);
 	afterAll(async function () {
 	  a && await clean(a);

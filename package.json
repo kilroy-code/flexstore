@@ -1,6 +1,6 @@
 {
-  "name": "flexstore",
-  "version": "0.0.1",
+  "name": "@kilroy-code/flexstore",
+  "version": "0.0.2",
   "description": "Safe and private storage replicated between clients and relays, with realtime updates.",
   "main": "index.js",
   "scripts": {
@@ -9,6 +9,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/kilroy-code/flexstore.git"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "keywords": [
     "key-value",
