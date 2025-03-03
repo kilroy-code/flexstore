@@ -238,11 +238,11 @@ describe('Synchronizer', function () {
 	    });
 	    it('hosted synchronizer can connect.', async function () {
 	      const peerName = new URL('/flexstore', baseURL).href;
-	      const collectionA = new MutableCollection({name: 'test'});
-	      const collectionB = new MutableCollection({name: 'test'});
+	      const collectionA = new kind({name: 'test'});
+	      const collectionB = new kind({name: 'test'});
 	      function recordUpdates(event) {
 		const updates = event.target.updates ||= [];
-		updates.push([!!event.detail.synchronizer, !!event.detail.text]);
+		updates.push([event.detail.synchronizer ? 'sync' : 'no sync', event.detail.text]);
 	      }
 	      collectionA.onupdate = recordUpdates;
 	      collectionB.onupdate = recordUpdates;
@@ -259,21 +259,21 @@ describe('Synchronizer', function () {
 	      await new Promise(resolve => setTimeout(resolve, 1e3));
 	      expect(await collectionA.retrieve({tag})).toBeFalsy();
 	      expect(await collectionB.retrieve({tag})).toBeFalsy();
-	      // Both collections get two events: true text, and then falsy text.
+	      // Both collections get two events: non-empty text, and then emptyy text.
 	      // Updates events on A have no synchronizer (they came from us).
-	      expect(collectionA.updates).toEqual([[false, true], [false, false]]);
+	      expect(collectionA.updates).toEqual([['no sync', 'foo'], ['no sync', '']]);
 	      // Update events on B have a synchronizer (they came from the relay);
-	      expect(collectionB.updates).toEqual([[true, true], [true, false]]);
+	      expect(collectionB.updates).toEqual([['sync', 'foo'], ['sync', '']]);
 	      await b.disconnect(); // Because one of the afterEach awaits b.closed.
 	    }, 10e3);
 	    it('hosted rendevous can connect.', async function () {
 	      const peerName = new URL('/flexstore/rendevous/42', baseURL).href;
-	      const collectionA = new MutableCollection({name: 'test'});
-	      const collectionB = new MutableCollection({name: 'test'});
+	      const collectionA = new kind({name: 'test'});
+	      const collectionB = new kind({name: 'test'});
 	      function recordUpdates(event) {
 		const updates = event.target.updates ||= [];
-		event.target.log('*** got update', event.detail);
-		updates.push([!!event.detail.synchronizer, !!event.detail.text]);
+		event.target.log('*** got update', event.detail.synchronizer ? 'sync' : 'no sync', event.detail.text);
+		updates.push([event.detail.synchronizer ? 'sync' : 'no sync', event.detail.text]);
 	      }
 	      collectionA.onupdate = recordUpdates;
 	      collectionB.onupdate = recordUpdates;
@@ -285,18 +285,18 @@ describe('Synchronizer', function () {
 	      b = collectionB.synchronizers.get(peerName);
 	      await a.synchronizationCompleted;
 	      await b.synchronizationCompleted;
-	      const tag = await collectionA.store("foo");
+	      const tag = await collectionA.store("bar");
 	      await new Promise(resolve => setTimeout(resolve, 1e3));
 
 	      await collectionA.remove({tag});
 	      await new Promise(resolve => setTimeout(resolve, 1e3));
 	      expect(await collectionA.retrieve({tag})).toBeFalsy();
 	      expect(await collectionB.retrieve({tag})).toBeFalsy();
-	      // Both collections get two events: true text, and then falsy text.
+	      // Both collections get two events: non-empty text, and then empty text.
 	      // Updates events on A have no synchronizer (they came from us).
-	      expect(collectionA.updates).toEqual([[false, true], [false, false]]);
+	      expect(collectionA.updates).toEqual([['no sync', 'bar'], ['no sync', '']]);
 	      // Update events on B have a synchronizer (they came from the peer);
-	      expect(collectionB.updates).toEqual([[true, true], [true, false]]);
+	      expect(collectionB.updates).toEqual([['sync', 'bar'], ['sync', '']]);
 	      await b.disconnect(); // Because one of the afterEach awaits b.closed.
 	    }, 10e3);
 	  });
