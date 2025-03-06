@@ -1,6 +1,6 @@
 import { PromiseWebRTC } from '../lib/webrtc.mjs';
 import Synchronizer from '../lib/synchronizer.mjs';
-import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../lib/collections.mjs';
+import { Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection } from '../lib/collections.mjs';
 
 import { testPrompt } from './support/testPrompt.mjs';
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
@@ -33,6 +33,64 @@ describe('Synchronizer', function () {
       });
       expect(echo).toBe(message);
       dataChannel.close();
+    });
+  });
+  describe('Credentials synchronization', function () {
+    // This is more of a system test than a unit test, as there is a lot going on here.
+    let collection = new MutableCollection({name: 'frogs'}),
+	frog, author, owner,
+	question = "Airspeed?",
+	answer = "African or Eurpopean?",
+	service = new URL('/flexstore', baseURL).href;
+    async function syncAll() { // Synchronize Credentials and frogs with the service.
+      await Credentials.synchronize(service);
+      await Credentials.synchronized();
+      await collection.synchronize(service);
+      await collection.synchronized;
+    }
+    async function killAll() { // Destroy the frog and all the keys under owner (including local device keys). 
+      expect(await collection.retrieve({tag: frog})).toBeTruthy(); // Now you see it...
+      await collection.remove({tag: frog});
+      await Credentials.destroy({tag: owner, recursiveMembers: true});
+      expect(await collection.retrieve({tag: frog})).toBe(''); // ... and now you don't.
+    }
+    beforeAll(async function () {
+      // Setup:
+      // 1. Create an invitation, and immediately claim it.
+      await Credentials.ready;
+      author = Credentials.author = await Credentials.createAuthor('-'); // Create invite.
+      Credentials.setAnswer(question, answer); // Claiming is a two step process.
+      await Credentials.claimInvitation(author, question);
+      // 2. Create an owning group from the frog, that includes the author we just created.      
+      owner = Credentials.owner = await Credentials.create(Credentials.author); // Create owner team with that member.
+      // 3. Store the frog with these credentials.
+      frog = await collection.store({title: 'bull'}); // Store item with that author/owner
+      // 4. Sychronize to service, disconnect, and REMOVE EVERYTHING LOCALLY.
+      await syncAll();
+      await Credentials.disconnect();
+      await collection.disconnect();
+      await killAll();
+    }, 15e3);
+    afterAll(async function () {
+      await killAll(); // Locally and on on-server, because we're still connected.
+    });
+    describe('recreation', function () {
+      let firstVerified;
+      beforeAll(async function () { // Pull into this empty local storage, as if on a new machine.
+	await syncAll();
+	Credentials.setAnswer(question, answer);
+	firstVerified = await collection.retrieve({tag: frog});
+      });
+      it('has collection.', async function () {
+	expect(firstVerified.json).toEqual({title: 'bull'}); // We got the data.
+      });
+      it('can re-store because we have the credentials.', async function () {
+	await collection.store({title: 'leopard'}, {tag: frog, author, owner});
+	const verified = await collection.retrieve({tag: frog}); // So the credentials came over, too.
+	expect(verified.json).toEqual({title: 'leopard'});
+	expect(verified.protectedHeader.act).toEqual(author);
+	expect(verified.protectedHeader.iss).toEqual(owner);
+      });
     });
   });
   describe('peer', function () {
@@ -69,7 +127,7 @@ describe('Synchronizer', function () {
       it('has connectionURL.', function () {
 	expect(a.connectionURL.startsWith(`${a.peerName}/requestDataChannel/ImmutableCollection/a`)).toBeTruthy();
       });
-    });
+    })
     describe('connected', function () {
       afterEach(async function () {
 	if (a) {
@@ -252,7 +310,9 @@ describe('Synchronizer', function () {
 	      a = collectionA.synchronizers.get(peerName);
 	      b = collectionB.synchronizers.get(peerName);
 	      await a.synchronizationCompleted;
+	      await a.peerSynchronizationCompleted;
 	      await b.synchronizationCompleted;
+	      await b.peerSynchronizationCompleted;	      
 
 	      const tag = await collectionA.store("foo");
 	      await collectionA.remove({tag});
@@ -284,7 +344,9 @@ describe('Synchronizer', function () {
 	      a = collectionA.synchronizers.get(peerName);
 	      b = collectionB.synchronizers.get(peerName);
 	      await a.synchronizationCompleted;
+	      await a.peerSynchronizationCompleted;
 	      await b.synchronizationCompleted;
+	      await b.peerSynchronizationCompleted;
 	      const tag = await collectionA.store("bar");
 	      await new Promise(resolve => setTimeout(resolve, 1e3));
 
