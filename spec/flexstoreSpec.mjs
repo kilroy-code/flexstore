@@ -21,6 +21,7 @@ describe('Flexstore', function () {
 
     // user, otherUser, and randomUser are distinct users authorized on this machine. Only user and otherUser are on team.
     user = Credentials.author = await Credentials.createAuthor('test pin:');
+    Credentials.owner = null;
     otherUser = await Credentials.createAuthor('airspeed velocity?');
     team = await Credentials.create(Credentials.author, otherUser);
     randomUser = await Credentials.createAuthor("favorite color?");
@@ -30,7 +31,6 @@ describe('Flexstore', function () {
     await Credentials.destroy({tag: otherUser, recursiveMembers: true});
     await Credentials.destroy(team);
     await Credentials.destroy({tag: user, recursiveMembers: true});
-    //console.log(Persist.lists); // Did we clean up? Note that versions never go away.
   });
   it('initializes credentials.', function () {
     expect(user && otherUser && team && randomUser).toBeTruthy();
