@@ -60,6 +60,7 @@ describe('Flexstore', function () {
 	expect(latestUpdate.json).toBeFalsy();
 	const signature = await collection.retrieve(tag);
 	expect(signature?.json).toBeUndefined();
+	await collection.destroy();
       });
       //beforeEach(function () { collection.debug = false; });
       it('stores.', function () {
