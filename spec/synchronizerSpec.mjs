@@ -20,7 +20,7 @@ describe('Synchronizer', function () {
       // Send them our signals:
       const outboundSignals = await connection.signals;
       const body = JSON.stringify(outboundSignals);
-      const request = await fetch(url, {method: 'POST', body});
+      const request = await fetch(url, {method: 'POST', headers: {"Content-Type": "application/json"}, body});
       const response = await request.text();
       // And accept their response:
       connection.signals = JSON.parse(response);
