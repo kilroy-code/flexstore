@@ -95,7 +95,7 @@ describe('Synchronizer', function () {
     });
   });
   describe('peer', function () {
-    const base = 'http://localhost:3000/flexstore';
+    const base = new URL('/flexstore', baseURL).href;
     function makeCollection({name = 'test', kind = ImmutableCollection, ...props}) { return new kind({name, ...props});}
     function makeSynchronizer({peerName = 'peer', ...props}) { return new Synchronizer({peerName, ...props, collection: makeCollection(props)}); }
     async function connect(a, b) { // Connect two synchronizer instances.
