@@ -73,6 +73,7 @@ describe('Synchronizer', function () {
     }, 15e3);
     afterAll(async function () {
       await killAll(); // Locally and on on-server, because we're still connected.
+      await collection.destroy();
     });
     describe('recreation', function () {
       let firstVerified;
@@ -108,9 +109,16 @@ describe('Synchronizer', function () {
       b = makeSynchronizer({name: 'b', ...bProps});
       return doConnect && connect(a, b);
     }
+    async function teardown() {
+      await a.collection.destroy();
+      await b.collection.destroy();
+    }
     describe('initializations', function () {
       beforeAll(function () {
 	a = makeSynchronizer({name: 'a'});
+      });
+      afterAll(async function () {
+	await a.collection.destroy();
       });
       it('has label.', async function() {
 	expect(a.label.startsWith('ImmutableCollection/a')).toBeTruthy();
@@ -127,7 +135,7 @@ describe('Synchronizer', function () {
       it('has connectionURL.', function () {
 	expect(a.connectionURL.startsWith(`${a.peerName}/requestDataChannel/ImmutableCollection/a`)).toBeTruthy();
       });
-    })
+    });
     describe('connected', function () {
       afterEach(async function () {
 	if (a) {
@@ -146,17 +154,20 @@ describe('Synchronizer', function () {
 	  expect(await b.dataChannelPromise).toBeTruthy();
 	  expect(a.connection.peer.connectionState).toBe('connected');
 	  expect(b.connection.peer.connectionState).toBe('connected');
+	  await teardown();
 	});
 	describe('version/send/receive', function () {
 	  it('agrees on max.', async function () {
 	    await setup({maxVersion: 2}, {maxVersion: 3});
 	    expect(await a.version).toBe(2);
 	    expect(await b.version).toBe(2);
+	    await teardown();
 	  });
 	  it('agrees on failure.', async function () {
 	    await setup({minVersion: 1, maxVersion: 2}, {minVersion: 3, maxVersion: 4});
 	    expect(await a.version).toBe(0);
 	    expect(await b.version).toBe(0);
+	    await teardown();
 	  });
 	});
 	it('synchronizes empty.', async function () {
@@ -164,6 +175,7 @@ describe('Synchronizer', function () {
 	  await a.startedSynchronization;
 	  expect(await a.completedSynchronization).toBe(0);
 	  expect(await b.completedSynchronization).toBe(0);
+	  await teardown();
 	});
       });
       describe('authorized', function () {
@@ -172,20 +184,23 @@ describe('Synchronizer', function () {
 	  const list = await synchronizer.collection.list('skipSync');
 	  await Promise.all(list.map(tag => synchronizer.collection.remove({tag})));
 	  expect(await synchronizer.collection.list.length).toBe(0);
+	  await synchronizer.collection.destroy();
 	}
+	let author;
 	beforeAll(async function () {
-	  Credentials.author = await Credentials.createAuthor('test pin:');
+	  author = Credentials.author = await Credentials.createAuthor('test pin:');
+	  Credentials.owner = '';
 	}, 10e3);
 	afterAll(async function () {
 	  a && await clean(a);
 	  b && await clean(b);
 	  await Credentials.destroy({tag: Credentials.author, recursiveMembers: true});
-	});
+	}, 15e3);
 	function testCollection(kind, label = kind.name) {
 	  describe(label, function () {
 	    it('basic sync', async function () {
-	      let aCol = new kind({name: 'a'}),
-		  bCol = new kind({name: 'b'});
+	      let aCol = new kind({name: 'a-basic'}),
+		  bCol = new kind({name: 'b-basic'});
 
 	      const tag1 = await aCol.store('abcd');
 	      const tag2 = await aCol.store('1234');
@@ -294,80 +309,84 @@ describe('Synchronizer', function () {
 		expect((await b.collection.retrieve({tag: tag8})).text).toBe('red');
 	      });
 	    });
-	    it('hosted synchronizer can connect.', async function () {
-	      const peerName = new URL('/flexstore', baseURL).href;
-	      const collectionA = new kind({name: 'test'});
-	      const collectionB = new kind({name: 'test'});
+	    describe('hosted', function () {
 	      function recordUpdates(event) {
 		const updates = event.target.updates ||= [];
 		updates.push([event.detail.synchronizer ? 'sync' : 'no sync', event.detail.text]);
 	      }
-	      collectionA.onupdate = recordUpdates;
-	      collectionB.onupdate = recordUpdates;
-	      // A and B are not talking directly to each other. They are both connecting to a relay.
-	      await collectionA.synchronize(peerName);
-	      await collectionB.synchronize(peerName);
-	      a = collectionA.synchronizers.get(peerName);
-	      b = collectionB.synchronizers.get(peerName);
-	      await a.synchronizationCompleted;
-	      await a.peerSynchronizationCompleted;
-	      await b.synchronizationCompleted;
-	      await b.peerSynchronizationCompleted;	      
+	      it('relay can connect.', async function () {
+		const peerName = new URL('/flexstore', baseURL).href;
+		// A and B are not talking directly to each other. They are both connecting to a relay.
+		const collectionA = new kind({name: 'testRelay'});
+		const collectionB = new kind({name: 'testRelay'});
+		collectionA.onupdate = recordUpdates;
+		collectionB.onupdate = recordUpdates;
+		a = b = null;
 
-	      const tag = await collectionA.store("foo");
-	      await collectionA.remove({tag});
-	      await new Promise(resolve => setTimeout(resolve, 1e3));
-	      expect(await collectionA.retrieve({tag})).toBeFalsy();
-	      expect(await collectionB.retrieve({tag})).toBeFalsy();
-	      // Both collections get two events: non-empty text, and then emptyy text.
-	      // Updates events on A have no synchronizer (they came from us).
-	      expect(collectionA.updates).toEqual([['no sync', 'foo'], ['no sync', '']]);
-	      // Update events on B have a synchronizer (they came from the relay);
-	      expect(collectionB.updates).toEqual([['sync', 'foo'], ['sync', '']]);
-	      await b.disconnect(); // Because one of the afterEach awaits b.closed.
-	    }, 10e3);
-	    it('hosted rendevous can connect.', async function () {
-	      const peerName = new URL('/flexstore/rendevous/42', baseURL).href;
-	      const collectionA = new kind({name: 'test'});
-	      const collectionB = new kind({name: 'test'});
-	      function recordUpdates(event) {
-		const updates = event.target.updates ||= [];
-		event.target.log('*** got update', event.detail.synchronizer ? 'sync' : 'no sync', event.detail.text);
-		updates.push([event.detail.synchronizer ? 'sync' : 'no sync', event.detail.text]);
-	      }
-	      collectionA.onupdate = recordUpdates;
-	      collectionB.onupdate = recordUpdates;
-	      // A and B are not talking directly to each other. They are both connecting to a relay.
-	      const syncA = collectionA.synchronize(peerName);
-	      await collectionB.synchronize(peerName);
-	      await syncA;
-	      a = collectionA.synchronizers.get(peerName);
-	      b = collectionB.synchronizers.get(peerName);
-	      await a.synchronizationCompleted;
-	      await a.peerSynchronizationCompleted;
-	      await b.synchronizationCompleted;
-	      await b.peerSynchronizationCompleted;
-	      const tag = await collectionA.store("bar");
-	      await new Promise(resolve => setTimeout(resolve, 1e3));
+		await collectionA.synchronize(peerName);
+		await collectionB.synchronize(peerName);
+		await collectionA.synchronized;
+		await collectionB.synchronized;
 
-	      await collectionA.remove({tag});
-	      await new Promise(resolve => setTimeout(resolve, 1e3));
-	      expect(await collectionA.retrieve({tag})).toBeFalsy();
-	      expect(await collectionB.retrieve({tag})).toBeFalsy();
-	      // Both collections get two events: non-empty text, and then empty text.
-	      // Updates events on A have no synchronizer (they came from us).
-	      expect(collectionA.updates).toEqual([['no sync', 'bar'], ['no sync', '']]);
-	      // Update events on B have a synchronizer (they came from the peer);
-	      expect(collectionB.updates).toEqual([['sync', 'bar'], ['sync', '']]);
-	      await b.disconnect(); // Because one of the afterEach awaits b.closed.
-	    }, 10e3);
+		const tag = await collectionA.store("foo");
+		await collectionA.remove({tag});
+		await new Promise(resolve => setTimeout(resolve, 1e3));
+		expect(await collectionA.retrieve({tag})).toBeFalsy();
+		expect(await collectionB.retrieve({tag})).toBeFalsy();
+		// Both collections get two events: non-empty text, and then emptyy text.
+		// Updates events on A have no synchronizer (they came from us).
+		expect(collectionA.updates).toEqual([['no sync', 'foo'], ['no sync', '']]);
+		// Update events on B have a synchronizer (they came from the relay);
+		expect(collectionB.updates).toEqual([['sync', 'foo'], ['sync', '']]);
+
+		await collectionA.disconnect();
+		await collectionB.disconnect();
+		// Alas, both collections are using the same database, with different connections to it. BOTH need closing before destory.
+		await collectionA.close();
+		await collectionB.close();
+		await collectionA.destroy();
+	      }, 10e3);
+	      it('rendevous can connect.', async function () {
+		const peerName = new URL('/flexstore/rendevous/42', baseURL).href;
+		// A and B are not talking directly to each other. They are both connecting to a relay.
+		const collectionA = new kind({name: 'testRendevous'});
+		const collectionB = new kind({name: 'testRendevous'});
+		collectionA.onupdate = recordUpdates;
+		collectionB.onupdate = recordUpdates;
+		a = b = null;
+
+		const syncA = collectionA.synchronize(peerName);
+		await collectionB.synchronize(peerName);
+		await syncA;
+		await collectionA.synchronized;
+		await collectionB.synchronized;
+		const tag = await collectionA.store("bar");
+		await new Promise(resolve => setTimeout(resolve, 1e3));
+
+		await collectionA.remove({tag});
+		await new Promise(resolve => setTimeout(resolve, 1e3));
+		expect(await collectionA.retrieve({tag})).toBeFalsy();
+		expect(await collectionB.retrieve({tag})).toBeFalsy();
+		// Both collections get two events: non-empty text, and then empty text.
+		// Updates events on A have no synchronizer (they came from us).
+		expect(collectionA.updates).toEqual([['no sync', 'bar'], ['no sync', '']]);
+		// Update events on B have a synchronizer (they came from the peer);
+		expect(collectionB.updates).toEqual([['sync', 'bar'], ['sync', '']]);
+
+		await collectionA.disconnect();
+		await collectionB.disconnect();
+		await collectionA.close(); // See previous test.
+		await collectionB.close();
+		await collectionA.destroy();
+	      }, 10e3);
+	    });
 	  });
 	}
 	testCollection(ImmutableCollection);
 	testCollection(MutableCollection);
 	testCollection(VersionedCollection);
       });
-    // TODO: VersionedCollection synchronizations:
+    // TODO:
     // - non-owner
     // - impossible history: signed, but depending on something that comes later
     // - various deleted history cases
