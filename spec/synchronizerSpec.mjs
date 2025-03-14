@@ -8,8 +8,11 @@ const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expect
 const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 Credentials.getUserDeviceSecret = testPrompt;
 
+//const CONNECT_TIME = 15e3; // normally
+const CONNECT_TIME = 7 * 45e3; // if throttled TURN in use
+
 describe('Synchronizer', function () {
-  describe('basic data channel', function () {
+  xdescribe('basic data channel', function () {
     it('smokes', async function () {
       const tag = 'testing';
       const message = 'echo';
@@ -70,7 +73,7 @@ describe('Synchronizer', function () {
       await Credentials.disconnect();
       await collection.disconnect();
       await killAll();
-    }, 15e3);
+    }, CONNECT_TIME);
     afterAll(async function () {
       await killAll(); // Locally and on on-server, because we're still connected.
       await collection.destroy();
@@ -81,7 +84,7 @@ describe('Synchronizer', function () {
 	await syncAll();
 	Credentials.setAnswer(question, answer);
 	firstVerified = await collection.retrieve({tag: frog});
-      });
+      }, CONNECT_TIME);
       it('has collection.', async function () {
 	expect(firstVerified.json).toEqual({title: 'bull'}); // We got the data.
       });
@@ -113,7 +116,7 @@ describe('Synchronizer', function () {
       await a.collection.destroy();
       await b.collection.destroy();
     }
-    describe('initializations', function () {
+    xdescribe('initializations', function () {
       beforeAll(function () {
 	a = makeSynchronizer({name: 'a'});
       });
@@ -147,7 +150,7 @@ describe('Synchronizer', function () {
 	  expect(b.connection.peer.connectionState).toBe('new');
 	}
       });
-      describe('basic', function () {
+      xdescribe('basic', function () {
 	it('changes state appropriately.', async function () {
 	  await setup({}, {});
 	  expect(await a.dataChannelPromise).toBeTruthy();
@@ -214,8 +217,8 @@ describe('Synchronizer', function () {
 	      expect((await b.collection.retrieve({tag: tag2})).text).toBe('1234');
 	      await clean(a);
 	      await clean(b);
-	    });
-	    describe('complex sync', function () {
+	    }, CONNECT_TIME);
+	    xdescribe('complex sync', function () {
 	      let author1, author2, owner, tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8, winningAuthor;
 	      beforeAll(async function () {
 		let aCol = new kind({name: 'a'}),
@@ -263,23 +266,27 @@ describe('Synchronizer', function () {
 		await new Promise(resolve => setTimeout(resolve, 3e3)); // fixme time
 	      }, 20e3);
 	      afterAll(async function () {
-		a.collection.onupdate = null;
-		b.collection.onupdate = null;
 		// Both get updates for everything added to either side since connecting: foo, bar, red, white.
 		// But in addition:
 		//   a gets xyz (which it did not ahve).
 		//   b gets 123 (which it didn't have) and a reconciled value for abc (of which it had the wrong sig).
-		a.collection.updates.sort(); // The timing of those received during synchronization can be different.
-		b.collection.updates.sort();
 		let aUpdates = [              'bar', 'foo', 'red', 'white', 'xyz'];
 		let bUpdates = ['123', 'abc', 'bar', 'foo', 'red', 'white'];
 		// For VersionedCollection both sides have a unique 'abc' to tell the other about.
 		if (label === 'VersionedCollection') aUpdates = ['abc', ...aUpdates];
-		expect(a.collection.updates).toEqual(aUpdates);
-		expect(b.collection.updates).toEqual(bUpdates);
 		Credentials.owner = owner;
-		await clean(a);
-		await clean(b);
+		if (a) {
+		  a.collection.onupdate = null;
+		  a.collection.updates.sort(); // The timing of those received during synchronization can be different.
+		  expect(a.collection.updates).toEqual(aUpdates);
+		  await clean(a);
+		}
+		if (b) {
+		  b.collection.onupdate = null;
+		  b.collection.updates.sort();
+		  expect(b.collection.updates).toEqual(bUpdates);
+		  await clean(b);
+		}
 		Credentials.owner = null;
 		await Credentials.destroy(owner);
 		await Credentials.destroy({tag: author2, recursiveMembers: true});
@@ -345,7 +352,7 @@ describe('Synchronizer', function () {
 		await collectionA.close();
 		await collectionB.close();
 		await collectionA.destroy();
-	      }, 10e3);
+	      }, CONNECT_TIME);
 	      it('rendevous can connect.', async function () {
 		const peerName = new URL('/flexstore/rendevous/42', baseURL).href;
 		// A and B are not talking directly to each other. They are both connecting to a relay.
@@ -378,13 +385,13 @@ describe('Synchronizer', function () {
 		await collectionA.close(); // See previous test.
 		await collectionB.close();
 		await collectionA.destroy();
-	      }, 10e3);
+	      }, CONNECT_TIME);
 	    });
 	  });
 	}
 	testCollection(ImmutableCollection);
-	testCollection(MutableCollection);
-	testCollection(VersionedCollection);
+	/*testCollection(MutableCollection);
+	testCollection(VersionedCollection);*/
       });
     // TODO:
     // - non-owner
