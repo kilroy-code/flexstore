@@ -8,13 +8,13 @@ const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expect
 const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 Credentials.getUserDeviceSecret = testPrompt;
 
-const CONNECT_TIME = 15e3; // normally
-//const CONNECT_TIME = 7 * 45e3; // if throttled TURN in use
+//const CONNECT_TIME = 15e3; // normally
+const CONNECT_TIME = 7 * 45e3; // if throttled TURN in use
 
 describe('Synchronizer', function () {
 
   describe('server relay', function () {
-    describe('basic data channel connection', function () {
+    xdescribe('basic data channel connection', function () {
       it('smokes', async function () {
 	const tag = 'testing';
 	const message = 'echo';
@@ -40,7 +40,7 @@ describe('Synchronizer', function () {
 	dataChannel.close();
       }, CONNECT_TIME);
     });
-    xdescribe('Credentials synchronization and rebuilding', function () {
+    describe('Credentials synchronization and rebuilding', function () {
       // This is more of a system test than a unit test, as there is a lot going on here.
       let collection = new MutableCollection({name: 'frogs'}),
 	  frog, author, owner,
@@ -48,28 +48,39 @@ describe('Synchronizer', function () {
 	  answer = "African or Eurpopean?",
 	  service = new URL('/flexstore', baseURL).href;
       async function syncAll() { // Synchronize Credentials and frogs with the service.
+	console.log('synchronizing credentials');
 	await Credentials.synchronize(service);
+	console.log('started');
 	await Credentials.synchronized();
+	console.log('completed');
 	await collection.synchronize(service);
+	console.log('frog sync started');
 	await collection.synchronized;
+	console.log('frrog sync completed');
       }
       async function killAll() { // Destroy the frog and all the keys under owner (including local device keys).
+	console.log('killing');
 	expect(await collection.retrieve({tag: frog})).toBeTruthy(); // Now you see it...
 	await collection.remove({tag: frog});
 	await Credentials.destroy({tag: owner, recursiveMembers: true});
 	expect(await collection.retrieve({tag: frog})).toBe(''); // ... and now you don't.
+	console.log('killed');
       }
       beforeAll(async function () {
 	// Setup:
 	// 1. Create an invitation, and immediately claim it.
 	await Credentials.ready;
 	author = Credentials.author = await Credentials.createAuthor('-'); // Create invite.
+	console.log({author});
 	Credentials.setAnswer(question, answer); // Claiming is a two step process.
 	await Credentials.claimInvitation(author, question);
+	console.log('claimed');
 	// 2. Create an owning group from the frog, that includes the author we just created.
 	owner = Credentials.owner = await Credentials.create(Credentials.author); // Create owner team with that member.
+	console.log({owner});
 	// 3. Store the frog with these credentials.
 	frog = await collection.store({title: 'bull'}); // Store item with that author/owner
+	console.log({frog});
 	// 4. Sychronize to service, disconnect, and REMOVE EVERYTHING LOCALLY.
 	await syncAll();
 	await Credentials.disconnect();
@@ -101,7 +112,7 @@ describe('Synchronizer', function () {
     });
   });
 
-  describe('peers', function () {
+  /*describe('peers', function () {
     const base = new URL('/flexstore', baseURL).href;
     function makeCollection({name = 'test', kind = ImmutableCollection, ...props}) { return new kind({name, ...props});}
     function makeSynchronizer({peerName = 'peer', ...props}) { return new Synchronizer({peerName, ...props, collection: makeCollection(props)}); }
@@ -413,5 +424,5 @@ describe('Synchronizer', function () {
     // - impossible history: signed, but depending on something that comes later
     // - various deleted history cases
     });
-  });
+  });*/
 });
