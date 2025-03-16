@@ -205,7 +205,7 @@ describe('Synchronizer', function () {
 	}, CONNECT_TIME);
       });
 
-      xdescribe('authorized', function () {
+      describe('authorized', function () {
 	async function clean(synchronizer) {
 	  await synchronizer.collection.disconnect();
 	  const list = await synchronizer.collection.list('skipSync');
