@@ -13,7 +13,7 @@ const CONNECT_TIME = 15e3; // normally
 
 describe('Synchronizer', function () {
 
-  /*describe('server relay', function () {
+  describe('server relay', function () {
     describe('basic data channel connection', function () {
       it('smokes', async function () {
 	const tag = 'testing';
@@ -40,7 +40,7 @@ describe('Synchronizer', function () {
 	dataChannel.close();
       }, CONNECT_TIME);
     });
-    describe('Credentials synchronization and rebuilding', function () {
+    xdescribe('Credentials synchronization and rebuilding', function () {
       // This is more of a system test than a unit test, as there is a lot going on here.
       let collection = new MutableCollection({name: 'frogs'}),
 	  frog, author, owner,
@@ -99,7 +99,7 @@ describe('Synchronizer', function () {
 	});
       });
     });
-  });*/
+  });
 
   describe('peers', function () {
     const base = new URL('/flexstore', baseURL).href;
@@ -121,7 +121,7 @@ describe('Synchronizer', function () {
       await b.collection.destroy();
     }
 
-    xdescribe('initializations', function () {
+    describe('initializations', function () {
       beforeAll(function () {
 	a = makeSynchronizer({name: 'a'});
       });
@@ -171,7 +171,7 @@ describe('Synchronizer', function () {
 	  expect(a.candidateType).toBeTruthy();
 	  await teardown();
 	}, CONNECT_TIME);
-	xdescribe('version/send/receive', function () {
+	describe('version/send/receive', function () {
 	  it('agrees on max.', async function () {
 	    await setup({maxVersion: 2}, {maxVersion: 3});
 	    expect(await a.version).toBe(2);
@@ -185,7 +185,7 @@ describe('Synchronizer', function () {
 	    await teardown();
 	  }, CONNECT_TIME);
 	});
-	xit('synchronizes empty.', async function () {
+	it('synchronizes empty.', async function () {
 	  await setup({}, {});
 	  await a.startedSynchronization;
 	  expect(await a.completedSynchronization).toBe(0);
@@ -194,7 +194,7 @@ describe('Synchronizer', function () {
 	}, CONNECT_TIME);
       });
 
-      /*describe('authorized', function () {
+      xdescribe('authorized', function () {
 	async function clean(synchronizer) {
 	  await synchronizer.collection.disconnect();
 	  const list = await synchronizer.collection.list('skipSync');
@@ -407,7 +407,7 @@ describe('Synchronizer', function () {
 	testCollection(ImmutableCollection);
 	testCollection(MutableCollection);
 	testCollection(VersionedCollection);
-      });*/
+      });
     // TODO:
     // - non-owner
     // - impossible history: signed, but depending on something that comes later
