@@ -14,7 +14,7 @@ const CONNECT_TIME = 7 * 45e3; // if throttled TURN in use
 describe('Synchronizer', function () {
 
   describe('server relay', function () {
-    xdescribe('basic data channel connection', function () {
+    describe('basic data channel connection', function () {
       it('smokes', async function () {
 	const tag = 'testing';
 	const message = 'echo';
@@ -112,7 +112,7 @@ describe('Synchronizer', function () {
     });
   });
 
-  /*describe('peers', function () {
+  describe('peers', function () {
     const base = new URL('/flexstore', baseURL).href;
     function makeCollection({name = 'test', kind = ImmutableCollection, ...props}) { return new kind({name, ...props});}
     function makeSynchronizer({peerName = 'peer', ...props}) { return new Synchronizer({peerName, ...props, collection: makeCollection(props)}); }
@@ -169,7 +169,7 @@ describe('Synchronizer', function () {
       });
       describe('basic connection between two peers on the same computer with direct signalling', function () {
 	it('changes state appropriately.', async function () {
-	  await setup({debug:true}, {debug:true});
+	  await setup({}, {});
 	  expect(await a.dataChannelPromise).toBeTruthy();
 	  expect(await b.dataChannelPromise).toBeTruthy();
 	  expect(a.connection.peer.connectionState).toBe('connected');
@@ -424,5 +424,5 @@ describe('Synchronizer', function () {
     // - impossible history: signed, but depending on something that comes later
     // - various deleted history cases
     });
-  });*/
+  });
 });
