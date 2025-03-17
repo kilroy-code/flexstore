@@ -14,7 +14,7 @@ const CONNECT_TIME = 15e3; // normally
 
 describe('Synchronizer', function () {
   afterAll(async function () {
-    if (!window.confirm?.('Delete test databases? After this, some browsers (Safari) need to be restarted.')) return;
+    if (!glotbalThis.confirm?.('Delete test databases? After this, some browsers (Safari) need to be restarted.')) return;
     await Promise.all([MutableCollection, ImmutableCollection, VersionedCollection].map(kind => {
       return Promise.all(['frogs', 'a', 'b', 'a-basic', 'b-basic', 'testRelay', 'testRendezvous'].map(name => new kind({name}).destroy()));
     }));
