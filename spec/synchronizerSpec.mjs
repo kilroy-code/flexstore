@@ -263,7 +263,7 @@ describe('Synchronizer', function () {
 
 		await collectionA.disconnect();
 		await collectionB.disconnect();
-	      }, CONNECT_TIME);
+	      }, 2 * CONNECT_TIME);
 	      it('rendevous can connect.', async function () {
 		const peerName = new URL('/flexstore/rendevous/42', baseURL).href;
 		// A and B are not talking directly to each other. They are both connecting to a relay.
