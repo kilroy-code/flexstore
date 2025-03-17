@@ -14,6 +14,7 @@ const CONNECT_TIME = 15e3; // normally
 
 describe('Synchronizer', function () {
   afterAll(async function () {
+    if (!confirm('Delete test databases? After this, some browsers (Safari) need to be restarted.')) return;
     await Promise.all([MutableCollection, ImmutableCollection, VersionedCollection].map(kind => {
       return Promise.all(['frogs', 'a', 'b', 'a-basic', 'b-basic', 'testRelay', 'testRendezvous'].map(name => new kind({name}).destroy()));
     }));
@@ -61,7 +62,7 @@ describe('Synchronizer', function () {
       }
       async function killAll() { // Destroy the frog and all the keys under owner (including local device keys).
 	expect(await collection.retrieve({tag: frog})).toBeTruthy(); // Now you see it...
-	await collection.remove({tag: frog});
+	await collection.remove({tag: frog, author, owner});
 	await Credentials.destroy({tag: owner, recursiveMembers: true});
 	expect(await collection.retrieve({tag: frog})).toBe(''); // ... and now you don't.
       }
