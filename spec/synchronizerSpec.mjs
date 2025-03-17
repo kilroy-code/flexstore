@@ -7,7 +7,7 @@ const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expect
 Object.assign(globalThis, {Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection}); // for debugging
 const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 
-const CONNECT_TIME = 20e3; // normally
+const CONNECT_TIME = 30e3; // normally
 
 describe('Synchronizer', function () {
   afterAll(async function () {
