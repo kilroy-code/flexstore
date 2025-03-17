@@ -1,5 +1,4 @@
 import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../index.mjs';
-import { testPrompt } from './support/testPrompt.mjs';
 const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalThis;
 
 // N.B.: If a previous failed run was not able to cleanup, there may be old objects owned by old users.
@@ -8,9 +7,6 @@ const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalTh
 // Percent of a normal implementation at which we expect this implemention to write stuff.
 const writeSlowdown = 0.04//fixme (typeof(process) !== 'undefined') ? 0.05 : 1; // My atomic fs writes in node are awful.
 const readSlowdown = 0.25;
-
-// TODO:getUserDeviceSecret => prompt
-Credentials.getUserDeviceSecret = testPrompt;
 
 describe('Flexstore', function () {
   let user, otherUser, team, randomUser;

@@ -2,15 +2,12 @@ import { PromiseWebRTC } from '../lib/webrtc.mjs';
 import Synchronizer from '../lib/synchronizer.mjs';
 import { Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection } from '../lib/collections.mjs';
 
-import { testPrompt } from './support/testPrompt.mjs';
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
 
 Object.assign(globalThis, {Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection}); // for debugging
 const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
-Credentials.getUserDeviceSecret = testPrompt;
 
-const CONNECT_TIME = 15e3; // normally
-//const CONNECT_TIME = 7 * 45e3; // if throttled TURN in use
+const CONNECT_TIME = 20e3; // normally
 
 describe('Synchronizer', function () {
   afterAll(async function () {
@@ -70,19 +67,19 @@ describe('Synchronizer', function () {
 	// Setup:
 	// 1. Create an invitation, and immediately claim it.
 	await Credentials.ready;
-	author = Credentials.author = await Credentials.createAuthor('-'); // Create invite.
+	author = await Credentials.createAuthor('-'); // Create invite.
 	Credentials.setAnswer(question, answer); // Claiming is a two step process.
 	await Credentials.claimInvitation(author, question);
 	// 2. Create an owning group from the frog, that includes the author we just created.
-	owner = Credentials.owner = await Credentials.create(Credentials.author); // Create owner team with that member.
+	owner = await Credentials.create(author); // Create owner team with that member.
 	// 3. Store the frog with these credentials.
-	frog = await collection.store({title: 'bull'}); // Store item with that author/owner
+	frog = await collection.store({title: 'bull'}, {author, owner}); // Store item with that author/owner
 	// 4. Sychronize to service, disconnect, and REMOVE EVERYTHING LOCALLY.
 	await syncAll();
 	await Credentials.disconnect();
 	await collection.disconnect();
 	await killAll();
-      }, CONNECT_TIME);
+      }, 2 * CONNECT_TIME);
       afterAll(async function () {
 	await killAll(); // Locally and on on-server, because we're still connected.
       });
@@ -264,7 +261,7 @@ describe('Synchronizer', function () {
 
 		await collectionA.disconnect();
 		await collectionB.disconnect();
-	      }, 2 * CONNECT_TIME);
+	      }, CONNECT_TIME);
 	      it('rendevous can connect.', async function () {
 		const peerName = new URL('/flexstore/rendevous/42', baseURL).href;
 		// A and B are not talking directly to each other. They are both connecting to a relay.
