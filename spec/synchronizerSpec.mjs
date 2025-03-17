@@ -5,13 +5,19 @@ import { Credentials, Collection, ImmutableCollection, MutableCollection, Versio
 import { testPrompt } from './support/testPrompt.mjs';
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
 
+Object.assign(globalThis, {Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection}); // for debugging
 const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 Credentials.getUserDeviceSecret = testPrompt;
 
-//const CONNECT_TIME = 15e3; // normally
-const CONNECT_TIME = 7 * 45e3; // if throttled TURN in use
+const CONNECT_TIME = 15e3; // normally
+//const CONNECT_TIME = 7 * 45e3; // if throttled TURN in use
 
 describe('Synchronizer', function () {
+  afterAll(async function () {
+    await Promise.all([MutableCollection, ImmutableCollection, VersionedCollection].map(kind => {
+      return Promise.all(['frogs', 'a', 'b', 'a-basic', 'b-basic', 'testRelay', 'testRendevous'].map(name => new kind({name}).destroy()));
+    }));
+  });
 
   describe('server relay', function () {
     describe('basic data channel connection', function () {
@@ -48,39 +54,28 @@ describe('Synchronizer', function () {
 	  answer = "African or Eurpopean?",
 	  service = new URL('/flexstore', baseURL).href;
       async function syncAll() { // Synchronize Credentials and frogs with the service.
-	console.log('synchronizing credentials');
 	await Credentials.synchronize(service);
-	console.log('started');
 	await Credentials.synchronized();
-	console.log('completed');
 	await collection.synchronize(service);
-	console.log('frog sync started');
 	await collection.synchronized;
-	console.log('frrog sync completed');
       }
       async function killAll() { // Destroy the frog and all the keys under owner (including local device keys).
-	console.log('killing');
 	expect(await collection.retrieve({tag: frog})).toBeTruthy(); // Now you see it...
 	await collection.remove({tag: frog});
 	await Credentials.destroy({tag: owner, recursiveMembers: true});
 	expect(await collection.retrieve({tag: frog})).toBe(''); // ... and now you don't.
-	console.log('killed');
       }
       beforeAll(async function () {
 	// Setup:
 	// 1. Create an invitation, and immediately claim it.
 	await Credentials.ready;
 	author = Credentials.author = await Credentials.createAuthor('-'); // Create invite.
-	console.log({author});
 	Credentials.setAnswer(question, answer); // Claiming is a two step process.
 	await Credentials.claimInvitation(author, question);
-	console.log('claimed');
 	// 2. Create an owning group from the frog, that includes the author we just created.
 	owner = Credentials.owner = await Credentials.create(Credentials.author); // Create owner team with that member.
-	console.log({owner});
 	// 3. Store the frog with these credentials.
 	frog = await collection.store({title: 'bull'}); // Store item with that author/owner
-	console.log({frog});
 	// 4. Sychronize to service, disconnect, and REMOVE EVERYTHING LOCALLY.
 	await syncAll();
 	await Credentials.disconnect();
@@ -89,7 +84,6 @@ describe('Synchronizer', function () {
       }, CONNECT_TIME);
       afterAll(async function () {
 	await killAll(); // Locally and on on-server, because we're still connected.
-	await collection.destroy();
       });
       describe('recreation', function () {
 	let firstVerified;
@@ -128,16 +122,11 @@ describe('Synchronizer', function () {
       return doConnect && connect(a, b);
     }
     async function teardown() {
-      await a.collection.destroy();
-      await b.collection.destroy();
     }
 
     describe('initializations', function () {
       beforeAll(function () {
 	a = makeSynchronizer({name: 'a'});
-      });
-      afterAll(async function () {
-	await a.collection.destroy();
       });
       it('has label.', async function() {
 	expect(a.label.startsWith('ImmutableCollection/a')).toBeTruthy();
@@ -211,7 +200,6 @@ describe('Synchronizer', function () {
 	  const list = await synchronizer.collection.list('skipSync');
 	  await Promise.all(list.map(tag => synchronizer.collection.remove({tag})));
 	  expect(await synchronizer.collection.list.length).toBe(0);
-	  await synchronizer.collection.destroy();
 	}
 	let author;
 	beforeAll(async function () {
@@ -275,10 +263,6 @@ describe('Synchronizer', function () {
 
 		await collectionA.disconnect();
 		await collectionB.disconnect();
-		// Alas, both collections are using the same database, with different connections to it. BOTH need closing before destory.
-		await collectionA.close();
-		await collectionB.close();
-		await collectionA.destroy();
 	      }, CONNECT_TIME);
 	      it('rendevous can connect.', async function () {
 		const peerName = new URL('/flexstore/rendevous/42', baseURL).href;
@@ -309,9 +293,6 @@ describe('Synchronizer', function () {
 
 		await collectionA.disconnect();
 		await collectionB.disconnect();
-		await collectionA.close(); // See previous test.
-		await collectionB.close();
-		await collectionA.destroy();
 	      }, CONNECT_TIME);
 	    });
 
