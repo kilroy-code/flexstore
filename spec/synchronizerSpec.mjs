@@ -15,7 +15,7 @@ const CONNECT_TIME = 15e3; // normally
 describe('Synchronizer', function () {
   afterAll(async function () {
     await Promise.all([MutableCollection, ImmutableCollection, VersionedCollection].map(kind => {
-      return Promise.all(['frogs', 'a', 'b', 'a-basic', 'b-basic', 'testRelay', 'testRendevous'].map(name => new kind({name}).destroy()));
+      return Promise.all(['frogs', 'a', 'b', 'a-basic', 'b-basic', 'testRelay', 'testRendezvous'].map(name => new kind({name}).destroy()));
     }));
   });
 
@@ -267,8 +267,8 @@ describe('Synchronizer', function () {
 	      it('rendevous can connect.', async function () {
 		const peerName = new URL('/flexstore/rendevous/42', baseURL).href;
 		// A and B are not talking directly to each other. They are both connecting to a relay.
-		const collectionA = new kind({name: 'testRendevous'});
-		const collectionB = new kind({name: 'testRendevous'});
+		const collectionA = new kind({name: 'testRendezvous'});
+		const collectionB = new kind({name: 'testRendezvous'});
 		collectionA.onupdate = recordUpdates;
 		collectionB.onupdate = recordUpdates;
 		a = b = null;
