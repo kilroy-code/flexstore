@@ -50,7 +50,7 @@ describe('Synchronizer', function () {
 	  frog, author, owner,
 	  question = "Airspeed?",
 	  answer = "African or Eurpopean?",
-	  service = new URL('/flexstore', baseURL).href;
+	  service = new URL('/flexstore/sync', baseURL).href;
       async function syncAll() { // Synchronize Credentials and frogs with the service.
 	await Credentials.synchronize(service);
 	await Credentials.synchronized();
@@ -139,7 +139,7 @@ describe('Synchronizer', function () {
 	});
       });
       it('has connectionURL.', function () {
-	expect(a.connectionURL.startsWith(`${a.peerName}/requestDataChannel/ImmutableCollection/a`)).toBeTruthy();
+	expect(a.connectionURL.startsWith(`${a.peerName}/ImmutableCollection/a`)).toBeTruthy();
       });
     });
 
@@ -235,7 +235,7 @@ describe('Synchronizer', function () {
 		updates.push([event.detail.synchronizer ? 'sync' : 'no sync', event.detail.text]);
 	      }
 	      it('relay can connect.', async function () {
-		const peerName = new URL('/flexstore', baseURL).href;
+		const peerName = new URL('/flexstore/sync', baseURL).href;
 		// A and B are not talking directly to each other. They are both connecting to a relay.
 		const collectionA = new kind({name: 'testRelay'});
 		const collectionB = new kind({name: 'testRelay'});
@@ -263,7 +263,7 @@ describe('Synchronizer', function () {
 		await collectionB.disconnect();
 	      }, CONNECT_TIME);
 	      it('rendevous can connect.', async function () {
-		const peerName = new URL('/flexstore/rendevous/42', baseURL).href;
+		const peerName = new URL('/flexstore/signal/42', baseURL).href;
 		// A and B are not talking directly to each other. They are both connecting to a relay.
 		const collectionA = new kind({name: 'testRendezvous'});
 		const collectionB = new kind({name: 'testRendezvous'});
