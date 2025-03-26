@@ -229,7 +229,7 @@ describe('Synchronizer', function () {
 	      await clean(b);
 	    }, CONNECT_TIME);
 
-	    describe('hosted', function () {
+	    describe('hosted or lan', function () {
 	      function recordUpdates(event) {
 		const updates = event.target.updates ||= [];
 		updates.push([event.detail.synchronizer ? 'sync' : 'no sync', event.detail.text]);
@@ -274,6 +274,44 @@ describe('Synchronizer', function () {
 		const syncA = collectionA.synchronize(peerName);
 		await collectionB.synchronize(peerName);
 		await syncA;
+		await collectionA.synchronized;
+		await collectionB.synchronized;
+		const tag = await collectionA.store("bar");
+		await new Promise(resolve => setTimeout(resolve, 1e3));
+
+		await collectionA.remove({tag});
+		await new Promise(resolve => setTimeout(resolve, 1e3));
+		expect(await collectionA.retrieve({tag})).toBeFalsy();
+		expect(await collectionB.retrieve({tag})).toBeFalsy();
+		// Both collections get two events: non-empty text, and then empty text.
+		// Updates events on A have no synchronizer (they came from us).
+		expect(collectionA.updates).toEqual([['no sync', 'bar'], ['no sync', '']]);
+		// Update events on B have a synchronizer (they came from the peer);
+		expect(collectionB.updates).toEqual([['sync', 'bar'], ['sync', '']]);
+
+		await collectionA.disconnect();
+		await collectionB.disconnect();
+	      }, CONNECT_TIME);
+	      it('peers can connect by direct transmission of signals (e.g., by qr code).', async function () {
+		// A and B are not talking directly to each other. They are both connecting to a relay.
+		// TODO:
+		if (label === 'VersionedCollection') return pending('Multiple direct sychnronizations requires multiplexed webrtc');
+		const collectionA = new kind({name: 'testSignals'});
+		const collectionB = new kind({name: 'testSignals'});
+		collectionA.onupdate = recordUpdates;
+		collectionB.onupdate = recordUpdates;
+		a = b = null;
+
+		const aService = 'signals';
+		await collectionA.synchronize(aService);
+		const synchronizerA = collectionA.synchronizers.get(aService);
+		const offerSignals = await synchronizerA.connection.signals;
+
+		await collectionB.synchronize(offerSignals);
+		const synchronizerB = collectionB.synchronizers.get(offerSignals);
+		const answerSignals = await synchronizerB.connection.signals;
+		await synchronizerA.completeSignalsSynchronization(answerSignals);
+
 		await collectionA.synchronized;
 		await collectionB.synchronized;
 		const tag = await collectionA.store("bar");
