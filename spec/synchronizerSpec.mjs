@@ -171,7 +171,7 @@ describe('Synchronizer', function () {
 	}, CONNECT_TIME);
 	describe('version/send/receive', function () {
 	  it('agrees on max.', async function () {
-	    await setup({maxVersion: 2}, {maxVersion: 3});
+	    await setup({minVersion: 1, maxVersion: 2}, {minVersion: 1, maxVersion: 3});
 	    expect(await a.version).toBe(2);
 	    expect(await b.version).toBe(2);
 	    await teardown();
