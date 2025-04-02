@@ -158,12 +158,12 @@ describe('VersionedCollection', function () {
 	singleTimestamp,
 	await copyVersions(copyA, merged),
 	await copyVersions(copyB, merged),
-	//await copyVersions(copyC, merged),
+	await copyVersions(copyC, merged),
       ];
       // Just for fun, let's put the second one first.
       await merged.put(singleTag, await copyB.get(singleTag));
       await merged.put(singleTag, await copyA.get(singleTag));
-      //await merged.put(singleTag, await copyC.get(singleTag));      
+      await merged.put(singleTag, await copyC.get(singleTag));
 					
       await Credentials.destroy(author);
     });
@@ -176,7 +176,7 @@ describe('VersionedCollection', function () {
     describe('with owner credentials', function () {
       it('creates the union of one history on top of another.', async function () {
 	expect(await merged.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);
-	expect((await merged.retrieve(singleTag)).text).toBe('copyB');
+	expect((await merged.retrieve(singleTag)).text).toBe('copyC');
       });
       it('create the union of multiple separate histories (e.g., as produced by relays that have no ownership).', async function () {
       });
@@ -240,18 +240,18 @@ describe('VersionedCollection', function () {
 	const unsignedMerged = new VersionedCollection({name: 'unsignedMerged'});
 	await copyVersions(copyA, unsignedMerged);
 	await copyVersions(copyB, unsignedMerged);
-	//await copyVersions(copyC, unsignedMerged);
+	await copyVersions(copyC, unsignedMerged);
 	// Just for fun, let's put the second one first.
 	await unsignedMerged.put(singleTag, await copyB.get(singleTag));
 	await unsignedMerged.put(singleTag, await copyA.get(singleTag));
-	//await unsignedMerged.put(singleTag, await copyC.get(singleTag));
+	await unsignedMerged.put(singleTag, await copyC.get(singleTag));
 
 	expect(await unsignedMerged.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);
-	expect((await unsignedMerged.retrieve(singleTag)).text).toBe('copyB');
+	expect((await unsignedMerged.retrieve(singleTag)).text).toBe('copyC');
 	// But we can confirm that it has not been anonymously merged:
 	const timestampSignature = await unsignedMerged.get(singleTag);
 	const timestamps = JSON.parse(timestampSignature);
-	expect(timestamps.length).toBe(2);
+	expect(timestamps.length).toBe(3); // unsigned merge of a, b, and c.
 	const [a, b] = await Promise.all(timestamps.map(signature => Credentials.verify(signature)));
 	expect(a.json).toBeInstanceOf(Object);
 	expect(b.json).toBeInstanceOf(Object);
