@@ -115,7 +115,23 @@ describe('VersionedCollection', function () {
   describe("'put' merging", function () {
     let singleData = "single", singleTag, singleHash, singleVersionSignature, singleTimestampsSignature, singleTimestamp;
     let tripleTag, tripleSignatureA, tripleSignatureB;
-    let copyA, copyB, timestampA, timestampB, merged;
+    let copyA, copyB, copyC, merged, mergedTimestamps;
+    async function copyAndAddOne(name, author, owner) { // Copy the "single" data over to a new copy, and then store something in the copy.
+      const copy = new VersionedCollection({name});
+      await copy.versions.put(singleHash, singleVersionSignature);
+      await copy.put(singleTag, singleTimestampsSignature);
+      await copy.store(name, {author, owner, tag: singleTag});
+      return copy;
+    }
+    async function copyVersions(source, destination) { // copy versions from source to destination, and return the last timestamp.
+      let versions = await source.getVersions(singleTag);
+      for (const time of await source.retrieveTimestamps(singleTag)) {
+	const hash = versions[time];
+	destination.versions.put(hash, await source.versions.get(hash));
+      }
+      return versions.latest;
+    }
+
     beforeAll(async function () {
       let author = await Credentials.create(), owner = author;
 
@@ -133,51 +149,34 @@ describe('VersionedCollection', function () {
       await collection.store(++counter, {author, owner, tag: tripleTag});
       tripleSignatureB = await collection.get(tripleTag);
 
+      copyA = await copyAndAddOne('copyA', author, owner);
+      copyB = await copyAndAddOne('copyB', author, owner);
+      copyC = await copyAndAddOne('copyC', author, owner);
 
-      console.log(`starting merge ${singleTag}, with ${singleHash} @ ${singleTimestamp}`);
       merged = new VersionedCollection({name: 'merged'});
-
-      copyA = new VersionedCollection({name: 'copyA'});
-      await copyA.versions.put(singleHash, singleVersionSignature);
-      console.log('put first in A');
-      await copyA.put(singleTag, singleTimestampsSignature);
-      console.log('store second in A, over', await copyA.getVersions(singleTag));
-      await copyA.store('dataA', {author, owner, tag: singleTag});
-      const versionsA = await copyA.getVersions(singleTag);
-      console.log('final A versions', versionsA);
-      for (const time of await copyA.retrieveTimestamps(singleTag)) {
-	const hash = versionsA[time];
-	timestampA = time;
-	merged.versions.put(hash, await copyA.versions.get(hash));
-      }
-      copyB = new VersionedCollection({name: 'copyB'});
-      await copyB.versions.put(singleHash, singleVersionSignature);
-      console.log('put first in B');      
-      await copyB.put(singleTag, singleTimestampsSignature);
-      console.log('store second in B, over', await copyB.getVersions(singleTag));
-      await copyB.store('dataB', {author, owner, tag: singleTag});                     // why is dataB producing the same has as dataA above.
-      const versionsB = await copyB.getVersions(singleTag);
-      console.log('final B versions', versionsB);
-      for (const time of await copyB.retrieveTimestamps(singleTag)) {
-	const hash = versionsB[time];
-	timestampB = time;	
-	merged.versions.put(hash, await copyB.versions.get(hash));
-      }
-      // FIXME: Just for fun, let's put the second one first.
-      console.log('store put A in merged');      
-      await merged.put(singleTag, await copyA.get(singleTag));
-      console.log('store put B in merged');
+      mergedTimestamps = [
+	singleTimestamp,
+	await copyVersions(copyA, merged),
+	await copyVersions(copyB, merged),
+	//await copyVersions(copyC, merged),
+      ];
+      // Just for fun, let's put the second one first.
       await merged.put(singleTag, await copyB.get(singleTag));
+      await merged.put(singleTag, await copyA.get(singleTag));
+      //await merged.put(singleTag, await copyC.get(singleTag));      
 					
       await Credentials.destroy(author);
     });
     afterAll(async function () {
       await copyA.destroy();
       await copyB.destroy();
+      await copyC.destroy();
+      await merged.destroy();
     });
     describe('with owner credentials', function () {
       it('creates the union of one history on top of another.', async function () {
-	expect(await merged.retrieveTimestamps(singleTag)).toEqual([singleTimestamp, timestampA, timestampB]);
+	expect(await merged.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);
+	expect((await merged.retrieve(singleTag)).text).toBe('copyB');
       });
       it('create the union of multiple separate histories (e.g., as produced by relays that have no ownership).', async function () {
       });
@@ -235,6 +234,29 @@ describe('VersionedCollection', function () {
 	
       });
       it('keeps multiple histories separate when they conflict.', async function () {
+
+	// Just like in the signed merged, except that we now have no credentials
+	// Internally, the signature is in two separate, individually signed parts.
+	const unsignedMerged = new VersionedCollection({name: 'unsignedMerged'});
+	await copyVersions(copyA, unsignedMerged);
+	await copyVersions(copyB, unsignedMerged);
+	//await copyVersions(copyC, unsignedMerged);
+	// Just for fun, let's put the second one first.
+	await unsignedMerged.put(singleTag, await copyB.get(singleTag));
+	await unsignedMerged.put(singleTag, await copyA.get(singleTag));
+	//await unsignedMerged.put(singleTag, await copyC.get(singleTag));
+
+	expect(await unsignedMerged.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);
+	expect((await unsignedMerged.retrieve(singleTag)).text).toBe('copyB');
+	// But we can confirm that it has not been anonymously merged:
+	const timestampSignature = await unsignedMerged.get(singleTag);
+	const timestamps = JSON.parse(timestampSignature);
+	expect(timestamps.length).toBe(2);
+	const [a, b] = await Promise.all(timestamps.map(signature => Credentials.verify(signature)));
+	expect(a.json).toBeInstanceOf(Object);
+	expect(b.json).toBeInstanceOf(Object);
+	expect(a.protectedHeader.iat).not.toBe(b.protectedHeader.iat);
+	await unsignedMerged.destroy();
       });
     });
   });
