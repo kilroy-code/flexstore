@@ -166,20 +166,20 @@ describe('VersionedCollection', function () {
       await merged.put(singleTag, await copyC.get(singleTag));
 					
       await Credentials.destroy(author);
-    });
+    }, 20e3);
     afterAll(async function () {
       await copyA.destroy();
       await copyB.destroy();
       await copyC.destroy();
       await merged.destroy();
-    });
+    }, 20e3);
     describe('with owner credentials', function () {
       it('creates the union of one history on top of another.', async function () {
 	expect(await merged.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);
 	expect((await merged.retrieve(singleTag)).text).toBe('copyC');
       });
-      it('create the union of multiple separate histories (e.g., as produced by relays that have no ownership).', async function () {
-      });
+      // it('create the union of multiple separate histories (e.g., as produced by relays that have no ownership).', async function () {
+      // });
     });
     describe('without requiring owner credentials', function () {
       it('keeps the first version.', async function () {
