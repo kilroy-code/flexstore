@@ -7,11 +7,11 @@ const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expect
 Object.assign(globalThis, {Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection}); // for debugging
 const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 
-const CONNECT_TIME = 30e3; // normally
+const CONNECT_TIME = 40e3; // normally
 
 describe('Synchronizer', function () {
 
-  xdescribe('server relay', function () {
+  describe('server relay', function () {
     describe('basic data channel connection', function () {
       it('smokes', async function () {
 	const tag = 'testing';
@@ -116,7 +116,7 @@ describe('Synchronizer', function () {
     async function teardown() {
     }
 
-    xdescribe('initializations', function () {
+    describe('initializations', function () {
       beforeAll(function () {
 	a = makeSynchronizer({name: 'a'});
       });
@@ -148,7 +148,7 @@ describe('Synchronizer', function () {
 	  expect(b.connection.peer.connectionState).toBe('new');
 	}
       });
-      xdescribe('basic connection between two peers on the same computer with direct signalling', function () {
+      describe('basic connection between two peers on the same computer with direct signalling', function () {
 	it('changes state appropriately.', async function () {
 	  await setup({}, {});
 	  expect(await a.dataChannelPromise).toBeTruthy();
@@ -157,7 +157,6 @@ describe('Synchronizer', function () {
 	  expect(b.connection.peer.connectionState).toBe('connected');
 	  await a.reportConnection();
 	  await b.reportConnection();
-	  console.log('a:', a.protocol, a.candidateType, 'b:', b.protocol, b.candidateType);
 	  expect(a.protocol).toBe(b.protocol);
 	  expect(a.protocol).toBeTruthy();
 	  expect(a.candidateType).toBeTruthy();
@@ -226,14 +225,13 @@ describe('Synchronizer', function () {
 	    describe('hosted or lan', function () {
 	      function recordUpdates(event) {
 		const updates = event.target.updates ||= [];
-		console.log('** update');
 		updates.push([event.detail.synchronizer ? 'sync' : 'no sync', event.detail.text]);
 	      }
 	      it('relay can connect.', async function () {
 		const peerName = new URL('/flexstore/sync', baseURL).href;
 		// A and B are not talking directly to each other. They are both connecting to a relay.
-		const collectionA = new kind({name: 'testRelay', debug:true});
-		const collectionB = new kind({name: 'testRelay', debug:true});
+		const collectionA = new kind({name: 'testRelay'});
+		const collectionB = new kind({name: 'testRelay'});
 		collectionA.onupdate = recordUpdates;
 		collectionB.onupdate = recordUpdates;
 		a = b = null;
@@ -243,13 +241,10 @@ describe('Synchronizer', function () {
 		await collectionA.synchronized;
 		await collectionB.synchronized;
 
-		console.log('** storing');
 		const tag = await collectionA.store("foo");
-		console.log('** stored');
-		await new Promise(resolve => setTimeout(resolve, 1e3));
+		await new Promise(resolve => setTimeout(resolve, 2e3));
 		await collectionA.remove({tag});
-		console.log('** removed'); 
-		await new Promise(resolve => setTimeout(resolve, 1e3));
+		await new Promise(resolve => setTimeout(resolve, 2e3));
 		expect(await collectionA.retrieve({tag})).toBeFalsy();
 		expect(await collectionB.retrieve({tag})).toBeFalsy();
 		// Both collections get two events: non-empty text, and then emptyy text.
@@ -331,7 +326,7 @@ describe('Synchronizer', function () {
 	      }, CONNECT_TIME);
 	    });
 
-	    xdescribe('complex sync', function () {
+	    describe('complex sync', function () {
 	      let author1, author2, owner, tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8, winningAuthor;
 	      beforeAll(async function () {
 		let aCol = new kind({name: 'a'}),
@@ -432,8 +427,8 @@ describe('Synchronizer', function () {
 	  });
 	}
 	testCollection(ImmutableCollection);
-	//testCollection(MutableCollection);
-	//testCollection(VersionedCollection);
+	testCollection(MutableCollection);
+	testCollection(VersionedCollection);
       });
     // TODO:
     // - non-owner
