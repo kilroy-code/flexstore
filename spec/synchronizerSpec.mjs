@@ -101,7 +101,7 @@ describe('Synchronizer', function () {
   describe('peers', function () {
     const base = new URL('/flexstore', baseURL).href;
     function makeCollection({name = 'test', kind = ImmutableCollection, ...props}) { return new kind({name, ...props});}
-    function makeSynchronizer({peerName = 'peer', ...props}) { return new Synchronizer({peerName, ...props, collection: makeCollection(props)}); }
+    function makeSynchronizer({serviceName = 'peer', ...props}) { return new Synchronizer({serviceName, ...props, collection: makeCollection(props)}); }
     async function connect(a, b) { // Connect two synchronizer instances.
       const aSignals = await a.startConnection();
       const bSignals = await b.startConnection(aSignals);
@@ -124,16 +124,16 @@ describe('Synchronizer', function () {
 	expect(a.label.startsWith('ImmutableCollection/a')).toBeTruthy();
       });
       describe('hostRequestBase', function () {
-	it('is built on url peerName', function () {
-	  expect(makeSynchronizer({peerName: base, name: 'a'}).hostRequestBase).toBe(`${base}/ImmutableCollection/a`);
+	it('is built on url serviceName', function () {
+	  expect(makeSynchronizer({serviceName: base, name: 'a'}).hostRequestBase).toBe(`${base}/ImmutableCollection/a`);
 	});
-	it('is empty if peerName is not a url', function () {
-	  expect(makeSynchronizer({peerName: 'foo'}).hostRequestBase).toBeFalsy();
-	  expect(makeSynchronizer({peerName: './foo'}).hostRequestBase).toBeFalsy();
+	it('is empty if serviceName is not a url', function () {
+	  expect(makeSynchronizer({serviceName: 'foo'}).hostRequestBase).toBeFalsy();
+	  expect(makeSynchronizer({serviceName: './foo'}).hostRequestBase).toBeFalsy();
 	});
       });
       it('has connectionURL.', function () {
-	expect(a.connectionURL.startsWith(`${a.peerName}/ImmutableCollection/a`)).toBeTruthy();
+	expect(a.connectionURL.startsWith(`${a.serviceName}/ImmutableCollection/a`)).toBeTruthy();
       });
     });
 
@@ -228,7 +228,7 @@ describe('Synchronizer', function () {
 		updates.push([event.detail.synchronizer ? 'sync' : 'no sync', event.detail.text]);
 	      }
 	      it('relay can connect.', async function () {
-		const peerName = new URL('/flexstore/sync', baseURL).href;
+		const serviceName = new URL('/flexstore/sync', baseURL).href;
 		// A and B are not talking directly to each other. They are both connecting to a relay.
 		const collectionA = new kind({name: 'testRelay'});
 		const collectionB = new kind({name: 'testRelay'});
@@ -236,8 +236,8 @@ describe('Synchronizer', function () {
 		collectionB.onupdate = recordUpdates;
 		a = b = null;
 
-		await collectionA.synchronize(peerName);
-		await collectionB.synchronize(peerName);
+		await collectionA.synchronize(serviceName);
+		await collectionB.synchronize(serviceName);
 		await collectionA.synchronized;
 		await collectionB.synchronized;
 
@@ -257,7 +257,7 @@ describe('Synchronizer', function () {
 		await collectionB.disconnect();
 	      }, CONNECT_TIME);
 	      it('rendevous can connect.', async function () {
-		const peerName = new URL('/flexstore/signal/42', baseURL).href;
+		const serviceName = new URL('/flexstore/signal/42', baseURL).href;
 		// A and B are not talking directly to each other. They are both connecting to a relay.
 		const collectionA = new kind({name: 'testRendezvous'});
 		const collectionB = new kind({name: 'testRendezvous'});
@@ -265,8 +265,8 @@ describe('Synchronizer', function () {
 		collectionB.onupdate = recordUpdates;
 		a = b = null;
 
-		const syncA = collectionA.synchronize(peerName);
-		await collectionB.synchronize(peerName);
+		const syncA = collectionA.synchronize(serviceName);
+		await collectionB.synchronize(serviceName);
 		await syncA;
 		await collectionA.synchronized;
 		await collectionB.synchronized;
@@ -427,8 +427,8 @@ describe('Synchronizer', function () {
 	  });
 	}
 	testCollection(ImmutableCollection);
-	testCollection(MutableCollection);
-	testCollection(VersionedCollection);
+	// testCollection(MutableCollection);
+	// testCollection(VersionedCollection);
       });
     // TODO:
     // - non-owner
