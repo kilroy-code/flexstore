@@ -1,4 +1,4 @@
-import { PromiseWebRTC } from '../lib/webrtc.mjs';
+import { SharedWebRTC } from '../lib/webrtc.mjs';
 import Synchronizer from '../lib/synchronizer.mjs';
 import { Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection } from '../lib/collections.mjs';
 
@@ -18,7 +18,7 @@ describe('Synchronizer', function () {
 	const message = 'echo';
 
 	const url = new URL(`/flexstore/requestDataChannel/test/echo/${tag}`, baseURL);
-	const connection = new PromiseWebRTC({label: tag});
+	const connection = SharedWebRTC.ensure({label: tag});
 	const dataChannelPromise = connection.createDataChannel();
 	// Send them our signals:
 	const outboundSignals = await connection.signals;
@@ -427,8 +427,8 @@ describe('Synchronizer', function () {
 	  });
 	}
 	testCollection(ImmutableCollection);
-	// testCollection(MutableCollection);
-	// testCollection(VersionedCollection);
+	testCollection(MutableCollection);
+	testCollection(VersionedCollection);
       });
     // TODO:
     // - non-owner
