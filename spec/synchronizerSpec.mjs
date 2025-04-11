@@ -78,6 +78,8 @@ describe('Synchronizer', function () {
       }, 2 * CONNECT_TIME);
       afterAll(async function () {
 	await killAll(); // Locally and on on-server, because we're still connected.
+	await Credentials.disconnect();
+	await collection.disconnect();
       });
       describe('recreation', function () {
 	let firstVerified;
