@@ -46,6 +46,7 @@ describe('Synchronizer', function () {
 	  answer = "African or Eurpopean?",
 	  service = new URL('/flexstore/sync', baseURL).href;
       async function syncAll() { // Synchronize Credentials and frogs with the service.
+	console.log('** syncAll');
 	await Credentials.synchronize(service);
 	await Credentials.synchronized();
 	await collection.synchronize(service);
@@ -70,6 +71,7 @@ describe('Synchronizer', function () {
 	frog = await collection.store({title: 'bull'}, {author, owner}); // Store item with that author/owner
 	// 4. Sychronize to service, disconnect, and REMOVE EVERYTHING LOCALLY.
 	await syncAll();
+	console.log('** disconnect');
 	await Credentials.disconnect();
 	await collection.disconnect();
 	await killAll();
@@ -109,8 +111,8 @@ describe('Synchronizer', function () {
     }
     let a, b;
     function setup(aProps = {}, bProps = {}, doConnect = true) {
-      a = makeSynchronizer({name: 'a', ...aProps});
-      b = makeSynchronizer({name: 'b', ...bProps});
+      a = makeSynchronizer({name: 'a', serviceName: 'peerB', ...aProps});
+      b = makeSynchronizer({name: 'b', serviceName: 'peerA', ...bProps});
       return doConnect && connect(a, b);
     }
     async function teardown() {
@@ -230,8 +232,9 @@ describe('Synchronizer', function () {
 	      it('relay can connect.', async function () {
 		const serviceName = new URL('/flexstore/sync', baseURL).href;
 		// A and B are not talking directly to each other. They are both connecting to a relay.
-		const collectionA = new kind({name: 'testRelay'});
-		const collectionB = new kind({name: 'testRelay'});
+		// We tell them to not multiplex because they have the same serviceName. This doesn't normally happen within a single app.
+		const collectionA = new kind({name: 'testRelay', multiplex: false});
+		const collectionB = new kind({name: 'testRelay', multiplex: false});
 		collectionA.onupdate = recordUpdates;
 		collectionB.onupdate = recordUpdates;
 		a = b = null;
@@ -259,8 +262,9 @@ describe('Synchronizer', function () {
 	      it('rendevous can connect.', async function () {
 		const serviceName = new URL('/flexstore/signal/42', baseURL).href;
 		// A and B are not talking directly to each other. They are both connecting to a relay.
-		const collectionA = new kind({name: 'testRendezvous'});
-		const collectionB = new kind({name: 'testRendezvous'});
+		// See comment above re muliplex.
+		const collectionA = new kind({name: 'testRendezvous', multiplex: false});
+		const collectionB = new kind({name: 'testRendezvous', multiplex: false});
 		collectionA.onupdate = recordUpdates;
 		collectionB.onupdate = recordUpdates;
 		a = b = null;
@@ -371,7 +375,7 @@ describe('Synchronizer', function () {
 		// but instead rely on getting notice from the other side about any updates.
 		// We do not provide any way to check. However, it is entirely reasonable to expect any such updates
 		// to arrive within a second.
-		await new Promise(resolve => setTimeout(resolve, 3e3)); // fixme time
+		await new Promise(resolve => setTimeout(resolve, 3e3));
 	      }, CONNECT_TIME);
 	      afterAll(async function () {
 		// Both get updates for everything added to either side since connecting: foo, bar, red, white.
