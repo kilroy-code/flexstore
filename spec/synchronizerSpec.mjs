@@ -46,15 +46,10 @@ describe('Synchronizer', function () {
 	  answer = "African or Eurpopean?",
 	  service = new URL('/flexstore/sync', baseURL).href;
       async function syncAll() { // Synchronize Credentials and frogs with the service.
-	console.log('** syncAll');
 	await Credentials.synchronize(service);
-	console.log('xxx started sync credentials');
 	await Credentials.synchronized();
-	console.log('xxx synchronized  credentials');
 	await collection.synchronize(service);
-	console.log('xxx started synchronize collection');
 	await collection.synchronized;
-	console.log('xxx synchronized collection');
       }
       async function killAll() { // Destroy the frog and all the keys under owner (including local device keys).
 	expect(await collection.retrieve({tag: frog})).toBeTruthy(); // Now you see it...
@@ -65,38 +60,24 @@ describe('Synchronizer', function () {
       beforeAll(async function () {
 	// Setup:
 	// 1. Create an invitation, and immediately claim it.
-	console.log('xxx start');
 	await Credentials.ready;
-	console.log('xxx ready');
 	author = await Credentials.createAuthor('-'); // Create invite.
-	console.log('xxx created author');
 	Credentials.setAnswer(question, answer); // Claiming is a two step process.
 	await Credentials.claimInvitation(author, question);
-	console.log('xxx claimed');
 	// 2. Create an owning group from the frog, that includes the author we just created.
 	owner = await Credentials.create(author); // Create owner team with that member.
-	console.log('xxx created owner');
 	// 3. Store the frog with these credentials.
 	frog = await collection.store({title: 'bull'}, {author, owner}); // Store item with that author/owner
-	console.log('xxx stored');
 	// 4. Sychronize to service, disconnect, and REMOVE EVERYTHING LOCALLY.
 	await syncAll();
-	console.log('xxx sync`ed');
 	await Credentials.disconnect();
-	console.log('xxx disconnected credentials in setup');
 	await collection.disconnect();
-	console.log('xxx disconnected collection in setup');
 	await killAll();
-	console.log('xxx killed, and finished setup');
       }, 2 * CONNECT_TIME);
       afterAll(async function () {
-	console.log('xxx after');
 	await killAll(); // Locally and on on-server, because we're still connected.
-	console.log('xxx killed all');
 	await Credentials.disconnect();
-	console.log('xxx disconnected credentials in cleanup');
 	await collection.disconnect();
-	console.log('xxx disconnected collection in cleanup');
       });
       describe('recreation', function () {
 	let firstVerified;
@@ -162,39 +143,27 @@ describe('Synchronizer', function () {
 
     describe('connected', function () {
       afterEach(async function () {
-	console.log('xx afterEach', {a, b});
 	if (a) {
 	  await a.disconnect();
-	  console.log('a disconnected');
 	  expect(a.connection.peer.connectionState).toBe('new');
 	}
 	if (b) {
 	  await b.closed;
-	  console.log('b disconnected');
 	  expect(b.connection.peer.connectionState).toBe('new');
 	}
-	console.log('xx afterEach complete');
       });
       describe('basic connection between two peers on the same computer with direct signalling', function () {
 	it('changes state appropriately.', async function () {
 	  await setup({}, {});
-	  console.log('xx setup complete');
 	  expect(await a.dataChannelPromise).toBeTruthy();
-	  console.log('xx a has promise');
 	  expect(await b.dataChannelPromise).toBeTruthy();
-	  console.log('xx b has promise');
 	  expect(a.connection.peer.connectionState).toBe('connected');
-	  console.log('xx a connected');
 	  expect(b.connection.peer.connectionState).toBe('connected');
-	  console.log('xx b connected');
 	  await a.reportConnection();
-	  console.log('xx a reported');
 	  await b.reportConnection();
-	  console.log('xx b reported');
 	  expect(a.protocol).toBe(b.protocol);
 	  expect(a.protocol).toBeTruthy();
 	  expect(a.candidateType).toBeTruthy();
-	  console.log('done');
 	  await teardown();
 	}, CONNECT_TIME);
 	describe('version/send/receive', function () {
