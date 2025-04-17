@@ -1,6 +1,4 @@
-import { SharedWebRTC } from '../lib/webrtc.mjs';
-import Synchronizer from '../lib/synchronizer.mjs';
-import { Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection } from '../lib/collections.mjs';
+import { SharedWebRTC, Synchronizer, Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection, version } from '../index.mjs';
 
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
 
@@ -18,7 +16,7 @@ describe('Synchronizer', function () {
 	const message = 'echo';
 
 	const url = new URL(`/flexstore/requestDataChannel/test/echo/${tag}`, baseURL);
-	const connection = SharedWebRTC.ensure({label: tag});
+	const connection = SharedWebRTC.ensure({service: url.href});
 	const dataChannelPromise = connection.createDataChannel('echo');
 	// Send them our signals:
 	const outboundSignals = await connection.signals;
@@ -47,9 +45,13 @@ describe('Synchronizer', function () {
 	  service = new URL('/flexstore/sync', baseURL).href;
       async function syncAll() { // Synchronize Credentials and frogs with the service.
 	await Credentials.synchronize(service);
+	console.log('synchronization and rebuilding syncAll Credentials.synchronize started');
 	await Credentials.synchronized();
+	console.log('synchronization and rebuilding syncAll Credentials synchronized');	
 	await collection.synchronize(service);
+	console.log('synchronization and rebuilding syncAll collection.synchronize started');	
 	await collection.synchronized;
+	console.log('synchronization and rebuilding syncAll collection synchronized');
       }
       async function killAll() { // Destroy the frog and all the keys under owner (including local device keys).
 	expect(await collection.retrieve({tag: frog})).toBeTruthy(); // Now you see it...
@@ -59,6 +61,7 @@ describe('Synchronizer', function () {
       }
       beforeAll(async function () {
 	// Setup:
+	//Credentials.collections.EncryptionKey.debug = Credentials.collections.KeyRecovery.debug = true;	 // FIXME remove
 	// 1. Create an invitation, and immediately claim it.
 	await Credentials.ready;
 	author = await Credentials.createAuthor('-'); // Create invite.
@@ -69,15 +72,20 @@ describe('Synchronizer', function () {
 	// 3. Store the frog with these credentials.
 	frog = await collection.store({title: 'bull'}, {author, owner}); // Store item with that author/owner
 	// 4. Sychronize to service, disconnect, and REMOVE EVERYTHING LOCALLY.
+	console.log('synchronization and rebuilding beforeAll start syncAll');
 	await syncAll();
+	console.log('synchronization and rebuilding beforeAll disconnect');
 	await Credentials.disconnect();
 	await collection.disconnect();
+	console.log('synchronization and rebuilding beforeAll killAll');	
 	await killAll();
+	console.log('synchronization and rebuilding beforeAll complete');
       }, 2 * CONNECT_TIME);
       afterAll(async function () {
 	await killAll(); // Locally and on on-server, because we're still connected.
 	await Credentials.disconnect();
 	await collection.disconnect();
+	console.log('synchronization and rebuilding afterAll complete', SharedWebRTC.connections);
       });
       describe('recreation', function () {
 	let firstVerified;
@@ -85,6 +93,7 @@ describe('Synchronizer', function () {
 	  await syncAll();
 	  Credentials.setAnswer(question, answer);
 	  firstVerified = await collection.retrieve({tag: frog});
+	  console.log('synchronization and rebuilding recreation beforeAll complete');
 	}, CONNECT_TIME);
 	it('has collection.', async function () {
 	  expect(firstVerified.json).toEqual({title: 'bull'}); // We got the data.
@@ -95,6 +104,144 @@ describe('Synchronizer', function () {
 	  expect(verified.json).toEqual({title: 'leopard'});
 	  expect(verified.protectedHeader.act).toEqual(author);
 	  expect(verified.protectedHeader.iss).toEqual(owner);
+	});
+      });
+    });
+  });
+
+  describe('Multiplexed', function () {
+    describe('webrtc', function () {
+      describe('relay', function () {
+	// Here are two different synchronizers on the same computer, that each connect to the same relay server.
+	// They will each get their own dataChannel to a mirroring pair of peers on the relay server,
+	// but they will happen to use the same SharedWebRTC connection.
+	let serviceName = new URL('/flexstore/sync', baseURL).href;
+	let synchronizer1, synchronizer2;
+
+	beforeAll(async function () {
+	  synchronizer1 = new Synchronizer({serviceName, channelName: 'ImmutableCollection/relay-webrtc-1'});
+	  synchronizer2 = new Synchronizer({serviceName, channelName: 'ImmutableCollection/relay-webrtc-2'});
+	  console.log('*** synchronizer1 connection', synchronizer1.connection);
+	  console.log('*** synchronizer2 connection', synchronizer2.connection);
+	  synchronizer1.connectChannel();
+	  synchronizer2.connectChannel();
+	  await Promise.all([synchronizer1.dataChannelPromise, synchronizer2.dataChannelPromise]);
+	});
+	afterAll(async function () {
+	  await Promise.all([synchronizer1.disconnect(), synchronizer2.disconnect()]);
+	  expect(synchronizer1.connection.peer.connectionState).toBe('new');
+	  expect(synchronizer2.connection.peer.connectionState).toBe('new');
+	});
+	it('connects peer through each synchronizer.', function () {
+	  expect(synchronizer1.connection.peer.connectionState).toBe('connected');
+	  expect(synchronizer2.connection.peer.connectionState).toBe('connected');
+	});
+	it('connects one datachannel for each synchronizer.', async function () {
+	  // Here we are reaching under the hood, and assuming multiplexed
+	  const dataChannel1 = await synchronizer1.dataChannelPromise;
+	  expect(synchronizer1.connection.dataChannels.get(synchronizer1.channelName)).toBe(dataChannel1);
+	  expect(dataChannel1.label).toBe(synchronizer1.channelName);
+
+	  const dataChannel2 = await synchronizer2.dataChannelPromise;
+	  expect(synchronizer2.connection.dataChannels.get(synchronizer2.channelName)).toBe(dataChannel2);
+	  expect(dataChannel2.label).toBe(synchronizer2.channelName);
+
+	  expect(dataChannel1).not.toBe(dataChannel2);
+	});
+	it('can communicate over dataChannel.', async function () {
+	  const v1 = await synchronizer1.version;
+	  const v2 = await synchronizer2.version;
+	  expect(v1).toBe(v2);
+	  expect(typeof v1).toBe('number');
+	});
+      });
+
+      describe('rendevous', function () {
+	// Here are two different synchronizers on the same computer, that each CONNECT through
+	// a rendevous server to a matching pair of synchronizers (that also happen to be running in this computer).
+	// They will each get their own dataChannel to their peer, and they use different SharedWebRTC connection that we give them
+	// directly, because the default behavior would try to use the same one.
+	let serviceName = new URL('/flexstore/signal/rendevous-test', baseURL).href;
+	// FIXME: let multiplex:'negotiated' come from serviceName
+	let synchronizer1a, synchronizer2a, synchronizer1b, synchronizer2b;
+	console.log({synchronizer1a, synchronizer1b});
+	beforeAll(async function () {
+	  const start = Date.now();
+	  synchronizer1a = new Synchronizer({serviceName, multiplex:'negotiated', channelName: 'ImmutableCollection/rendevous-webrtc-1'});
+	  synchronizer2a = new Synchronizer({serviceName, maxVersion: version+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
+
+	  // We want to test as if the next two synchronizers are running in another Javascript.
+	  // So we will have to pass in a separate webrtc.
+	  let connection = new SharedWebRTC({service: serviceName, label: 'secondservice', multiplex: synchronizer1a.connection.multiplex});
+	  synchronizer1b = new Synchronizer({serviceName, connection, channelName: 'ImmutableCollection/rendevous-webrtc-1'});
+	  synchronizer2b = new Synchronizer({serviceName, connection, maxVersion: version+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
+
+	  console.log('rendevous test: start a');
+	  synchronizer1a.connectChannel();
+	  synchronizer2a.connectChannel();
+	  console.log('rendevous test: start b');
+	  synchronizer1b.connectChannel();
+	  synchronizer2b.connectChannel();
+	  console.log('rendevous test: waiting for datachannel');
+	  await Promise.all([
+	    synchronizer1a.dataChannelPromise, synchronizer2a.dataChannelPromise,
+	    synchronizer1b.dataChannelPromise, synchronizer2b.dataChannelPromise
+	  ]);
+	  console.log('rendevous test: got datachannel');
+	  console.log('rendevous time before:', Date.now() - start);
+	}, 15e3); // Firefox. 
+	afterAll(async function () {
+	  const start = Date.now();
+	  console.log('rendevous test: disconnecting');
+	  await Promise.all([
+	    synchronizer1a.disconnect(),
+	    synchronizer2a.disconnect(),
+	    synchronizer1b.closed, // When the other end is dropped, this side's closed promise fulfills.
+	    synchronizer2b.closed
+	  ]);
+	  console.log('rendevous test: disconnected');	  
+	  expect(synchronizer1a.connection.peer.connectionState).toBe('new');
+	  expect(synchronizer2a.connection.peer.connectionState).toBe('new');
+	  // We don't have a promise indicating when the connection itself is closed, but it should be quickly after synchronizer.closed.
+	  await new Promise(resolve => setTimeout(resolve, 100));
+	  expect(synchronizer1b.connection.peer.connectionState).toBe('new');
+	  expect(synchronizer2b.connection.peer.connectionState).toBe('new');
+	  console.log('rendevous test: done');
+	  console.log('rendevous time after:', Date.now() - start);	  
+	});
+	it('connects peer through each synchronizer.', function () {
+	  expect(synchronizer1a.connection.peer.connectionState).toBe('connected');
+	  expect(synchronizer2a.connection.peer.connectionState).toBe('connected');
+	  expect(synchronizer1b.connection.peer.connectionState).toBe('connected');
+	  expect(synchronizer2b.connection.peer.connectionState).toBe('connected');
+	});
+	it('connects one datachannel for each synchronizer.', async function () {
+	  // Here we are reaching under the hood, and assuming multiplexed
+	  const dataChannel1a = await synchronizer1a.dataChannelPromise;
+	  expect(synchronizer1a.connection.dataChannels.get(synchronizer1a.channelName)).toBe(dataChannel1a);
+	  expect(dataChannel1a.label).toBe(synchronizer1a.channelName);
+	  //console.log('addchannel result a, dataChannel1a matches:', dataChannel1a === synchronizer1a.connection.dataChannels.get(synchronizer1a.channelName));
+
+	  const dataChannel1b = await synchronizer1b.dataChannelPromise;
+	  expect(synchronizer1b.connection.dataChannels.get(synchronizer1b.channelName)).toBe(dataChannel1b);
+	  expect(dataChannel1b.label).toBe(synchronizer1b.channelName);
+	  //console.log('addchannel result b, dataChannel1b matches:', dataChannel1b === synchronizer1b.connection.dataChannels.get(synchronizer1b.channelName));
+
+	  const dataChannel2a = await synchronizer2a.dataChannelPromise;
+	  expect(synchronizer2a.connection.dataChannels.get(synchronizer2a.channelName)).toBe(dataChannel2a);
+	  expect(dataChannel2a.label).toBe(synchronizer2a.channelName);
+
+
+	  const dataChannel2b = await synchronizer2b.dataChannelPromise;
+	  expect(synchronizer2b.connection.dataChannels.get(synchronizer2b.channelName)).toBe(dataChannel2b);
+	  expect(dataChannel2b.label).toBe(synchronizer2b.channelName);
+	});
+	it('can communicate over dataChannel.', async function () {
+	  expect(await synchronizer1a.version).toBe(version);
+	  expect(await synchronizer1b.version).toBe(version);
+
+	  expect(await synchronizer2a.version).toBe(version+1);
+	  expect(await synchronizer2b.version).toBe(version+1);
 	});
       });
     });
@@ -121,23 +268,32 @@ describe('Synchronizer', function () {
     }
 
     describe('initializations', function () {
-      beforeAll(function () {
-	a = makeSynchronizer({name: 'a'});
-      });
-      it('has label.', async function() {
-	expect(a.label.startsWith('ImmutableCollection/a')).toBeTruthy();
+      const collection = new ImmutableCollection({name: 'a'});
+      describe('label and url', function () {
+	let a;
+	beforeAll(function () {
+	  console.log('zz before creating a', SharedWebRTC.connections);
+	  a = new Synchronizer({serviceName: 'a', collection});
+	  console.log('zz after creating a', SharedWebRTC.connections);
+	});
+	it('has label.', async function() {
+	  expect(a.label.startsWith('ImmutableCollection/a')).toBeTruthy();
+	});
+	it('has connectionURL.', function () {
+	  expect(a.connectionURL.startsWith(`${a.serviceName}/ImmutableCollection/a`)).toBeTruthy();
+	});
       });
       describe('hostRequestBase', function () {
 	it('is built on url serviceName', function () {
-	  expect(makeSynchronizer({serviceName: base, name: 'a'}).hostRequestBase).toBe(`${base}/ImmutableCollection/a`);
+	  const a = new Synchronizer({serviceName: base, collection});
+	  expect(makeSynchronizer(a).hostRequestBase).toBe(`${base}/ImmutableCollection/a`);
 	});
 	it('is empty if serviceName is not a url', function () {
-	  expect(makeSynchronizer({serviceName: 'foo'}).hostRequestBase).toBeFalsy();
-	  expect(makeSynchronizer({serviceName: './foo'}).hostRequestBase).toBeFalsy();
+	  const a = new Synchronizer({serviceName: 'foo', collection});
+	  const b = new Synchronizer({serviceName: './foo', collection});
+	  expect(a.hostRequestBase).toBeFalsy();
+	  expect(b.hostRequestBase).toBeFalsy();
 	});
-      });
-      it('has connectionURL.', function () {
-	expect(a.connectionURL.startsWith(`${a.serviceName}/ImmutableCollection/a`)).toBeTruthy();
       });
     });
 
@@ -232,17 +388,22 @@ describe('Synchronizer', function () {
 		updates.push([event.detail.synchronizer ? 'sync' : 'no sync', event.detail.text]);
 	      }
 	      it('relay can connect.', async function () {
-		const serviceName = new URL('/flexstore/sync', baseURL).href;
+		let serviceName = new URL('/flexstore/sync', baseURL).href;
+
 		// A and B are not talking directly to each other. They are both connecting to a relay.
-		// We tell them to not multiplex because they have the same serviceName. This doesn't normally happen within a single app.
-		const collectionA = new kind({name: 'testRelay', multiplex: false});
-		const collectionB = new kind({name: 'testRelay', multiplex: false});
+		const collectionA = new kind({name: 'testRelay'});
+		const collectionB = new kind({name: 'testRelay'});
 		collectionA.onupdate = recordUpdates;
 		collectionB.onupdate = recordUpdates;
 		a = b = null;
 
 		await collectionA.synchronize(serviceName);
-		await collectionB.synchronize(serviceName);
+		// Hand create a second connection.
+		const connection = new SharedWebRTC({service: serviceName,
+						     label: 'secondservice',
+						     multiplex: collectionA.synchronizers.get(serviceName).connection.multiplex});
+		let synchronizerB = new Synchronizer({serviceName, connection, collection: collectionB});
+		synchronizerB.connectChannel();
 		await collectionA.synchronized;
 		await collectionB.synchronized;
 
@@ -263,17 +424,20 @@ describe('Synchronizer', function () {
 	      }, CONNECT_TIME);
 	      it('rendevous can connect.', async function () {
 		const serviceName = new URL('/flexstore/signal/42', baseURL).href;
-		// A and B are not talking directly to each other. They are both connecting to a relay.
-		// See comment above re muliplex.
-		const collectionA = new kind({name: 'testRendezvous', multiplex: false});
-		const collectionB = new kind({name: 'testRendezvous', multiplex: false});
+		// A and B are talking directly to each other. They are merely connecting through a rendevous
+		const collectionA = new kind({name: 'testRendezvous'});
+		const collectionB = new kind({name: 'testRendezvous'});
 		collectionA.onupdate = recordUpdates;
 		collectionB.onupdate = recordUpdates;
 		a = b = null;
 
-		const syncA = collectionA.synchronize(serviceName);
-		await collectionB.synchronize(serviceName);
-		await syncA;
+		const synchronizerA = collectionA.synchronize(serviceName);
+		// Hand create a second connection
+		const connection = new SharedWebRTC({service: serviceName,
+						     label: 'secondservice',
+						     multiplex: collectionA.synchronizers.get(serviceName).connection.multiplex});
+		let synchronizerB = new Synchronizer({serviceName, connection, collection: collectionB});
+		synchronizerB.connectChannel();
 		await collectionA.synchronized;
 		await collectionB.synchronized;
 		const tag = await collectionA.store("bar");
