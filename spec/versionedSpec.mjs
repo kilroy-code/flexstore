@@ -1,6 +1,7 @@
 import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../index.mjs';
 const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalThis;
 
+// TODO: Demonstrate error on double spend.
 describe('VersionedCollection', function () {
   let initialData = {foo: 17}, tag, collection = new VersionedCollection({name: 'test'}), initialItemData;
   beforeAll(async function () {

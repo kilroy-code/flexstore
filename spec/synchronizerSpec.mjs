@@ -121,8 +121,6 @@ describe('Synchronizer', function () {
 	beforeAll(async function () {
 	  synchronizer1 = new Synchronizer({serviceName, channelName: 'ImmutableCollection/relay-webrtc-1'});
 	  synchronizer2 = new Synchronizer({serviceName, channelName: 'ImmutableCollection/relay-webrtc-2'});
-	  console.log('*** synchronizer1 connection', synchronizer1.connection);
-	  console.log('*** synchronizer2 connection', synchronizer2.connection);
 	  synchronizer1.connectChannel();
 	  synchronizer2.connectChannel();
 	  await Promise.all([synchronizer1.dataChannelPromise, synchronizer2.dataChannelPromise]);
@@ -164,10 +162,9 @@ describe('Synchronizer', function () {
 	let serviceName = new URL('/flexstore/signal/rendevous-test', baseURL).href;
 	// FIXME: let multiplex:'negotiated' come from serviceName
 	let synchronizer1a, synchronizer2a, synchronizer1b, synchronizer2b;
-	console.log({synchronizer1a, synchronizer1b});
 	beforeAll(async function () {
 	  const start = Date.now();
-	  synchronizer1a = new Synchronizer({serviceName, multiplex:'negotiated', channelName: 'ImmutableCollection/rendevous-webrtc-1'});
+	  synchronizer1a = new Synchronizer({serviceName, /*fixme multiplex:'negotiated',*/ channelName: 'ImmutableCollection/rendevous-webrtc-1'});
 	  synchronizer2a = new Synchronizer({serviceName, maxVersion: version+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
 
 	  // We want to test as if the next two synchronizers are running in another Javascript.
@@ -265,6 +262,7 @@ describe('Synchronizer', function () {
       return doConnect && connect(a, b);
     }
     async function teardown() {
+      await a.disconnect();
     }
 
     describe('initializations', function () {
@@ -330,10 +328,15 @@ describe('Synchronizer', function () {
 	    await teardown();
 	  }, CONNECT_TIME);
 	  it('agrees on failure.', async function () {
+	    console.log('failure setup');
 	    await setup({minVersion: 1, maxVersion: 2}, {minVersion: 3, maxVersion: 4});
+	    console.log('failure setup complete');	    
 	    expect(await a.version).toBe(0);
+	    console.log('failure got a');
 	    expect(await b.version).toBe(0);
+	    console.log('failure got b');
 	    await teardown();
+	    console.log('failure teardown complete');
 	  }, CONNECT_TIME);
 	});
 	it('synchronizes empty.', async function () {
@@ -385,6 +388,7 @@ describe('Synchronizer', function () {
 	    describe('hosted or lan', function () {
 	      function recordUpdates(event) {
 		const updates = event.target.updates ||= [];
+		console.log('update', event.target.serviceKey || 'first', !!event.detail.synchronizer, event.detail.text);
 		updates.push([event.detail.synchronizer ? 'sync' : 'no sync', event.detail.text]);
 	      }
 	      it('relay can connect.', async function () {
@@ -392,60 +396,79 @@ describe('Synchronizer', function () {
 
 		// A and B are not talking directly to each other. They are both connecting to a relay.
 		const collectionA = new kind({name: 'testRelay'});
-		const collectionB = new kind({name: 'testRelay'});
+		const collectionB = new kind({name: 'testRelay', serviceKey: 'secondrelay', debug: true});
 		collectionA.onupdate = recordUpdates;
 		collectionB.onupdate = recordUpdates;
 		a = b = null;
 
-		await collectionA.synchronize(serviceName);
-		// Hand create a second connection.
-		const connection = new SharedWebRTC({service: serviceName,
-						     label: 'secondservice',
-						     multiplex: collectionA.synchronizers.get(serviceName).connection.multiplex});
-		let synchronizerB = new Synchronizer({serviceName, connection, collection: collectionB});
-		synchronizerB.connectChannel();
+		collectionA.synchronize(serviceName);
+		collectionB.synchronize(serviceName);
 		await collectionA.synchronized;
 		await collectionB.synchronized;
 
 		const tag = await collectionA.store("foo");
-		await new Promise(resolve => setTimeout(resolve, 2e3));
+		expect(await collectionB.retrieve(tag)).toBeTruthy(); // Now we know that B has seen the update.
+		//await new Promise(resolve => setTimeout(resolve, 2e3));
+		console.log('boston, b', tag, await collectionB.retrieve(tag)); // No we know it was sync'd
+
 		await collectionA.remove({tag});
-		await new Promise(resolve => setTimeout(resolve, 2e3));
+		//await new Promise(resolve => setTimeout(resolve, 2e3));
 		expect(await collectionA.retrieve({tag})).toBeFalsy();
+		await new Promise(resolve => setTimeout(resolve, 100)); // give it a chance to propagate
 		expect(await collectionB.retrieve({tag})).toBeFalsy();
-		// Both collections get two events: non-empty text, and then emptyy text.
-		// Updates events on A have no synchronizer (they came from us).
+		// // Both collections get two events: non-empty text, and then emptyy text.
+		// // Updates events on A have no synchronizer (they came from us).
 		expect(collectionA.updates).toEqual([['no sync', 'foo'], ['no sync', '']]);
-		// Update events on B have a synchronizer (they came from the relay);
+		// // Update events on B have a synchronizer (they came from the relay);
 		expect(collectionB.updates).toEqual([['sync', 'foo'], ['sync', '']]);
+		console.log('boston a', collectionA.updates);
+		console.log('boston b', collectionB.updates);		
 
 		await collectionA.disconnect();
 		await collectionB.disconnect();
 	      }, CONNECT_TIME);
 	      it('rendevous can connect.', async function () {
+		console.log('rendevous: started');
 		const serviceName = new URL('/flexstore/signal/42', baseURL).href;
 		// A and B are talking directly to each other. They are merely connecting through a rendevous
 		const collectionA = new kind({name: 'testRendezvous'});
-		const collectionB = new kind({name: 'testRendezvous'});
+		const collectionB = new kind({name: 'testRendezvous', serviceKey: 'secondrendevous'});
 		collectionA.onupdate = recordUpdates;
 		collectionB.onupdate = recordUpdates;
 		a = b = null;
 
-		const synchronizerA = collectionA.synchronize(serviceName);
-		// Hand create a second connection
-		const connection = new SharedWebRTC({service: serviceName,
-						     label: 'secondservice',
-						     multiplex: collectionA.synchronizers.get(serviceName).connection.multiplex});
-		let synchronizerB = new Synchronizer({serviceName, connection, collection: collectionB});
-		synchronizerB.connectChannel();
+		collectionA.synchronize(serviceName);
+		collectionB.synchronize(serviceName);
+		// const sa = collectionA.synchronizers.get(serviceName);
+		// const sb = collectionB.synchronizers.get(serviceName);
+		// console.log('rendevous:',{serviceName, sa, sb});
+		// FIXME: shouldn't this work?
+		// expect(sa.connection.peer.connectionState).toBe('connected');
+		// expect(sb.connection.peer.connectionState).toBe('connected');		
+
+		// const sva = collectionA.versions.synchronizers.get(serviceName);
+		// const svb = collectionB.versions.synchronizers.get(serviceName);
+		// console.log('rendevous:', {serviceName, sva, svb});
+		// // FIXME: this should work, and without the delay
+		// await new Promise(resolve => setTimeout(resolve, 4e3));
+		// expect(sva.connection.peer.connectionState).toBe('connected');
+		// expect(svb.connection.peer.connectionState).toBe('connected');		
+
+		console.log('rendevous: awaiting synchronized');
 		await collectionA.synchronized;
 		await collectionB.synchronized;
+		console.log('rendevous: synchronized');
+		//await new Promise(resolve => setTimeout(resolve, 2e3));
+		//console.log('rendevous: waited');				  
+
 		const tag = await collectionA.store("bar");
-		await new Promise(resolve => setTimeout(resolve, 1e3));
+		//await new Promise(resolve => setTimeout(resolve), 1e3); // give it a chance to propagate		
+		expect(await collectionB.retrieve(tag)).toBeTruthy(); // Now we know that B has seen the update.
+		//await new Promise(resolve => setTimeout(resolve, 2e3));
 
 		await collectionA.remove({tag});
-		await new Promise(resolve => setTimeout(resolve, 1e3));
 		expect(await collectionA.retrieve({tag})).toBeFalsy();
+		await new Promise(resolve => setTimeout(resolve, 100)); // give it a chance to propagate
 		expect(await collectionB.retrieve({tag})).toBeFalsy();
 		// Both collections get two events: non-empty text, and then empty text.
 		// Updates events on A have no synchronizer (they came from us).
@@ -453,37 +476,43 @@ describe('Synchronizer', function () {
 		// Update events on B have a synchronizer (they came from the peer);
 		expect(collectionB.updates).toEqual([['sync', 'bar'], ['sync', '']]);
 
-		await collectionA.disconnect();
-		await collectionB.disconnect();
+		console.log('rendevous: disconnecting');
+		await collectionA.disconnect(); // Only need one of a directly connected pair
+		console.log('rendevous: disconnected');		
 	      }, CONNECT_TIME);
 	      it('peers can connect by direct transmission of signals (e.g., by qr code).', async function () {
 		// A and B are not talking directly to each other. They are both connecting to a relay.
 		// TODO:
-		if (label === 'VersionedCollection') return pending('Multiple direct sychnronizations requires multiplexed webrtc');
 		const collectionA = new kind({name: 'testSignals'});
-		const collectionB = new kind({name: 'testSignals'});
+		const collectionB = new kind({name: 'testSignals', serviceKey: 'seconddirect'});
 		collectionA.onupdate = recordUpdates;
 		collectionB.onupdate = recordUpdates;
 		a = b = null;
 
 		const aService = 'signals';
-		await collectionA.synchronize(aService);
+		console.log('signal: synchronize A');
+		collectionA.synchronize(aService); // await would block.
 		const synchronizerA = collectionA.synchronizers.get(aService);
+		console.log('signal: synchronizer A', synchronizerA);
 		const offerSignals = await synchronizerA.connection.signals;
 
-		await collectionB.synchronize(offerSignals);
+		console.log('signal: synchronize B with', offerSignals);
+		collectionB.synchronize(offerSignals); // await would block.
 		const synchronizerB = collectionB.synchronizers.get(offerSignals);
 		const answerSignals = await synchronizerB.connection.signals;
+		console.log('signal: complete A with', answerSignals);
 		await synchronizerA.completeSignalsSynchronization(answerSignals);
+		console.log('signal connected', synchronizerA, synchronizerB);
 
 		await collectionA.synchronized;
 		await collectionB.synchronized;
 		const tag = await collectionA.store("bar");
-		await new Promise(resolve => setTimeout(resolve, 1e3));
+		expect(await collectionB.retrieve(tag)).toBeTruthy(); // Now we know that B has seen the update.
+		//await new Promise(resolve => setTimeout(resolve, 1e3));
 
 		await collectionA.remove({tag});
-		await new Promise(resolve => setTimeout(resolve, 1e3));
 		expect(await collectionA.retrieve({tag})).toBeFalsy();
+		await new Promise(resolve => setTimeout(resolve, 100));
 		expect(await collectionB.retrieve({tag})).toBeFalsy();
 		// Both collections get two events: non-empty text, and then empty text.
 		// Updates events on A have no synchronizer (they came from us).
@@ -492,7 +521,6 @@ describe('Synchronizer', function () {
 		expect(collectionB.updates).toEqual([['sync', 'bar'], ['sync', '']]);
 
 		await collectionA.disconnect();
-		await collectionB.disconnect();
 	      }, CONNECT_TIME);
 	    });
 
