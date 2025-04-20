@@ -153,7 +153,7 @@ describe('Synchronizer', function () {
 	// FIXME: let multiplex:'negotiated' come from serviceName
 	let synchronizer1a, synchronizer2a, synchronizer1b, synchronizer2b;
 	beforeAll(async function () {
-	  synchronizer1a = new Synchronizer({serviceName, /*fixme multiplex:'negotiated',*/ channelName: 'ImmutableCollection/rendevous-webrtc-1'});
+	  synchronizer1a = new Synchronizer({serviceName, channelName: 'ImmutableCollection/rendevous-webrtc-1'});
 	  synchronizer2a = new Synchronizer({serviceName, maxVersion: version+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
 
 	  // We want to test as if the next two synchronizers are running in another Javascript.
