@@ -1,3 +1,4 @@
+import uuid4 from 'uuid4';
 import { SharedWebRTC, Synchronizer, Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection, version } from '../index.mjs';
 
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
@@ -6,13 +7,14 @@ Object.assign(globalThis, {Credentials, Collection, ImmutableCollection, Mutable
 const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 
 const CONNECT_TIME = 50e3; // normally
+const unique = uuid4();
 
 describe('Synchronizer', function () {
 
   describe('server relay', function () {
     describe('basic data channel connection', function () {
       it('smokes', async function () {
-	const tag = 'testing';
+	const tag = 'testing'+unique;
 	const message = 'echo';
 
 	const url = new URL(`/flexstore/requestDataChannel/test/echo/${tag}`, baseURL);
@@ -38,7 +40,7 @@ describe('Synchronizer', function () {
     });
     describe('Credentials synchronization and rebuilding', function () {
       // This is more of a system test than a unit test, as there is a lot going on here.
-      let collection = new MutableCollection({name: 'frogs'}),
+      let collection = new MutableCollection({name: 'frogs' + unique}),
 	  frog, author, owner,
 	  question = "Airspeed?",
 	  answer = "African or Eurpopean?",
@@ -72,12 +74,16 @@ describe('Synchronizer', function () {
 	await Credentials.disconnect();
 	await collection.disconnect();
 	await killAll();
+	console.log('synchronization and rebuilding setup complete');
       }, 2 * CONNECT_TIME);
       afterAll(async function () {
 	await killAll(); // Locally and on on-server, because we're still connected.
+	await new Promise(resolve => setTimeout(resolve, 2e3));
 	await Credentials.disconnect();
 	await collection.disconnect();
-      });
+	await new Promise(resolve => setTimeout(resolve, 2e3));
+	console.log('synchronization and rebuilding teardown complete');
+      }, 10e3);
       describe('recreation', function () {
 	let firstVerified;
 	beforeAll(async function () { // Pull into this empty local storage, as if on a new machine.
@@ -109,14 +115,15 @@ describe('Synchronizer', function () {
 	let synchronizer1, synchronizer2;
 
 	beforeAll(async function () {
-	  synchronizer1 = new Synchronizer({serviceName, channelName: 'ImmutableCollection/relay-webrtc-1'});
-	  synchronizer2 = new Synchronizer({serviceName, channelName: 'ImmutableCollection/relay-webrtc-2'});
+	  synchronizer1 = new Synchronizer({serviceName, channelName: 'ImmutableCollection/relay-webrtc-1' + unique});
+	  synchronizer2 = new Synchronizer({serviceName, channelName: 'ImmutableCollection/relay-webrtc-2' + unique});
 	  synchronizer1.connectChannel();
 	  synchronizer2.connectChannel();
 	  await Promise.all([synchronizer1.dataChannelPromise, synchronizer2.dataChannelPromise]);
 	});
 	afterAll(async function () {
 	  await Promise.all([synchronizer1.disconnect(), synchronizer2.disconnect()]);
+	  await new Promise(resolve => setTimeout(resolve, 1e3)); // fixme: we should include change of state in disconnect promise
 	  expect(synchronizer1.connection.peer.connectionState).toBe('new');
 	  expect(synchronizer2.connection.peer.connectionState).toBe('new');
 	});
@@ -149,7 +156,7 @@ describe('Synchronizer', function () {
 	// a rendevous server to a matching pair of synchronizers (that also happen to be running in this computer).
 	// They will each get their own dataChannel to their peer, and they use different SharedWebRTC connection that we give them
 	// directly, because the default behavior would try to use the same one.
-	let serviceName = new URL('/flexstore/signal/rendevous-test', baseURL).href;
+	let serviceName = new URL('/flexstore/signal/rendevous-test' + unique, baseURL).href;
 	// FIXME: let multiplex:'negotiated' come from serviceName
 	let synchronizer1a, synchronizer2a, synchronizer1b, synchronizer2b;
 	beforeAll(async function () {
@@ -361,10 +368,11 @@ describe('Synchronizer', function () {
 	      }
 	      it('relay can connect.', async function () {
 		let serviceName = new URL('/flexstore/sync', baseURL).href;
+		let name = 'testRelay' + unique;
 
 		// A and B are not talking directly to each other. They are both connecting to a relay.
-		const collectionA = new kind({name: 'testRelay'});
-		const collectionB = new kind({name: 'testRelay', serviceKey: 'secondrelay'});
+		const collectionA = new kind({name});
+		const collectionB = new kind({name, serviceKey: 'secondrelay'});
 		collectionA.onupdate = recordUpdates;
 		collectionB.onupdate = recordUpdates;
 		a = b = null;
@@ -375,11 +383,12 @@ describe('Synchronizer', function () {
 		await collectionB.synchronized;
 
 		const tag = await collectionA.store("foo");
+		await new Promise(resolve => setTimeout(resolve, 1e3)); // give it a chance to propagate
 		expect(await collectionB.retrieve(tag)).toBeTruthy(); // Now we know that B has seen the update.
 
 		await collectionA.remove({tag});
 		expect(await collectionA.retrieve({tag})).toBeFalsy();
-		await new Promise(resolve => setTimeout(resolve, 100)); // give it a chance to propagate
+		await new Promise(resolve => setTimeout(resolve, 2e3)); // give it a chance to propagate on slow server
 		expect(await collectionB.retrieve({tag})).toBeFalsy();
 		// Both collections get two events: non-empty text, and then emptyy text.
 		// Updates events on A have no synchronizer (they came from us).
@@ -391,7 +400,7 @@ describe('Synchronizer', function () {
 		await collectionB.disconnect();
 	      }, CONNECT_TIME);
 	      it('rendevous can connect.', async function () {
-		const serviceName = new URL('/flexstore/signal/42', baseURL).href;
+		const serviceName = new URL('/flexstore/signal/' + unique, baseURL).href;
 		// A and B are talking directly to each other. They are merely connecting through a rendevous
 		const collectionA = new kind({name: 'testRendezvous'});
 		const collectionB = new kind({name: 'testRendezvous', serviceKey: 'secondrendevous'});
@@ -410,7 +419,7 @@ describe('Synchronizer', function () {
 
 		await collectionA.remove({tag});
 		expect(await collectionA.retrieve({tag})).toBeFalsy();
-		await new Promise(resolve => setTimeout(resolve, 100)); // give it a chance to propagate
+		await new Promise(resolve => setTimeout(resolve, 1e3)); // give it a chance to propagate
 		expect(await collectionB.retrieve({tag})).toBeFalsy();
 		// Both collections get two events: non-empty text, and then empty text.
 		// Updates events on A have no synchronizer (they came from us).
