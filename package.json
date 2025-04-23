@@ -1,6 +1,6 @@
 {
   "name": "@kilroy-code/flexstore",
-  "version": "0.0.18",
+  "version": "0.0.19",
   "description": "Safe and private storage replicated between clients and relays, with realtime updates.",
   "main": "index.js",
   "scripts": {
@@ -33,7 +33,7 @@
   },
   "homepage": "https://github.com/kilroy-code/flexstore#readme",
   "dependencies": {
-    "@ki1r0y/distributed-security": "^1.1.2",
+    "@ki1r0y/distributed-security": "^1.1.3",
     "node-pre-gyp": "^0.17.0",
     "uuid4": "^2.0.3",
     "wrtc": "^0.4.7"
