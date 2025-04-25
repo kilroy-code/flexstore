@@ -1,5 +1,5 @@
 import uuid4 from 'uuid4';
-import { SharedWebRTC, Synchronizer, Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection, version } from '../index.mjs';
+import { SharedWebRTC, Synchronizer, Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection, storageVersion } from '../index.mjs';
 
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
 
@@ -161,13 +161,13 @@ describe('Synchronizer', function () {
 	let synchronizer1a, synchronizer2a, synchronizer1b, synchronizer2b;
 	beforeAll(async function () {
 	  synchronizer1a = new Synchronizer({serviceName, channelName: 'ImmutableCollection/rendevous-webrtc-1'});
-	  synchronizer2a = new Synchronizer({serviceName, maxVersion: version+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
+	  synchronizer2a = new Synchronizer({serviceName, maxVersion: storageVersion+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
 
 	  // We want to test as if the next two synchronizers are running in another Javascript.
 	  // So we will have to pass in a separate webrtc.
 	  let connection = new SharedWebRTC({service: serviceName, label: 'secondservice', multiplex: synchronizer1a.connection.multiplex});
 	  synchronizer1b = new Synchronizer({serviceName, connection, channelName: 'ImmutableCollection/rendevous-webrtc-1'});
-	  synchronizer2b = new Synchronizer({serviceName, connection, maxVersion: version+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
+	  synchronizer2b = new Synchronizer({serviceName, connection, maxVersion: storageVersion+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
 
 	  synchronizer1a.connectChannel();
 	  synchronizer2a.connectChannel();
@@ -217,11 +217,11 @@ describe('Synchronizer', function () {
 	  expect(dataChannel2b.label).toBe(synchronizer2b.channelName);
 	});
 	it('can communicate over dataChannel.', async function () {
-	  expect(await synchronizer1a.version).toBe(version);
-	  expect(await synchronizer1b.version).toBe(version);
+	  expect(await synchronizer1a.version).toBe(storageVersion);
+	  expect(await synchronizer1b.version).toBe(storageVersion);
 
-	  expect(await synchronizer2a.version).toBe(version+1);
-	  expect(await synchronizer2b.version).toBe(version+1);
+	  expect(await synchronizer2a.version).toBe(storageVersion+1);
+	  expect(await synchronizer2b.version).toBe(storageVersion+1);
 	});
       });
     });
