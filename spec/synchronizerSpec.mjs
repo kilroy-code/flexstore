@@ -373,8 +373,8 @@ describe('Synchronizer', function () {
 		// A and B are not talking directly to each other. They are both connecting to a relay.
 		const collectionA = new kind({name});
 		const collectionB = new kind({name, serviceKey: 'secondrelay'});
-		collectionA.onupdate = recordUpdates;
-		collectionB.onupdate = recordUpdates;
+		collectionA.itemEmitter.onupdate = recordUpdates;
+		collectionB.itemEmitter.onupdate = recordUpdates;
 		a = b = null;
 
 		collectionA.synchronize(serviceName);
@@ -392,9 +392,9 @@ describe('Synchronizer', function () {
 		expect(await collectionB.retrieve({tag})).toBeFalsy();
 		// Both collections get two events: non-empty text, and then emptyy text.
 		// Updates events on A have no synchronizer (they came from us).
-		expect(collectionA.updates).toEqual([['no sync', 'foo'], ['no sync', '']]);
+		expect(collectionA.itemEmitter.updates).toEqual([['no sync', 'foo'], ['no sync', '']]);
 		// Update events on B have a synchronizer (they came from the relay);
-		expect(collectionB.updates).toEqual([['sync', 'foo'], ['sync', '']]);
+		expect(collectionB.itemEmitter.updates).toEqual([['sync', 'foo'], ['sync', '']]);
 
 		await collectionA.disconnect();
 		await collectionB.disconnect();
@@ -404,8 +404,8 @@ describe('Synchronizer', function () {
 		// A and B are talking directly to each other. They are merely connecting through a rendevous
 		const collectionA = new kind({name: 'testRendezvous'});
 		const collectionB = new kind({name: 'testRendezvous', serviceKey: 'secondrendevous'});
-		collectionA.onupdate = recordUpdates;
-		collectionB.onupdate = recordUpdates;
+		collectionA.itemEmitter.onupdate = recordUpdates;
+		collectionB.itemEmitter.onupdate = recordUpdates;
 		a = b = null;
 
 		collectionA.synchronize(serviceName);
@@ -423,9 +423,9 @@ describe('Synchronizer', function () {
 		expect(await collectionB.retrieve({tag})).toBeFalsy();
 		// Both collections get two events: non-empty text, and then empty text.
 		// Updates events on A have no synchronizer (they came from us).
-		expect(collectionA.updates).toEqual([['no sync', 'bar'], ['no sync', '']]);
+		expect(collectionA.itemEmitter.updates).toEqual([['no sync', 'bar'], ['no sync', '']]);
 		// Update events on B have a synchronizer (they came from the peer);
-		expect(collectionB.updates).toEqual([['sync', 'bar'], ['sync', '']]);
+		expect(collectionB.itemEmitter.updates).toEqual([['sync', 'bar'], ['sync', '']]);
 
 		await collectionA.disconnect(); // Only need one of a directly connected pair
 	      }, CONNECT_TIME);
@@ -434,8 +434,8 @@ describe('Synchronizer', function () {
 		// TODO:
 		const collectionA = new kind({name: 'testSignals'});
 		const collectionB = new kind({name: 'testSignals', serviceKey: 'seconddirect'});
-		collectionA.onupdate = recordUpdates;
-		collectionB.onupdate = recordUpdates;
+		collectionA.itemEmitter.onupdate = recordUpdates;
+		collectionB.itemEmitter.onupdate = recordUpdates;
 		a = b = null;
 
 		const aService = 'signals';
@@ -459,9 +459,9 @@ describe('Synchronizer', function () {
 		expect(await collectionB.retrieve({tag})).toBeFalsy();
 		// Both collections get two events: non-empty text, and then empty text.
 		// Updates events on A have no synchronizer (they came from us).
-		expect(collectionA.updates).toEqual([['no sync', 'bar'], ['no sync', '']]);
+		expect(collectionA.itemEmitter.updates).toEqual([['no sync', 'bar'], ['no sync', '']]);
 		// Update events on B have a synchronizer (they came from the peer);
-		expect(collectionB.updates).toEqual([['sync', 'bar'], ['sync', '']]);
+		expect(collectionB.itemEmitter.updates).toEqual([['sync', 'bar'], ['sync', '']]);
 
 		await collectionA.disconnect();
 	      }, CONNECT_TIME);
@@ -490,9 +490,9 @@ describe('Synchronizer', function () {
 		tag3 = await secondCollection.store('abc', {author: author2, owner});
 		tag4 = await bCol.store('xyz', {author: author2, owner});
 
-		aCol.updates = []; bCol.updates = [];
-		aCol.onupdate =  event => aCol.updates.push(event.detail.text);
-		bCol.onupdate = event => bCol.updates.push(event.detail.text);
+		aCol.itemEmitter.updates = []; bCol.itemEmitter.updates = [];
+		aCol.itemEmitter.onupdate =  event => aCol.itemEmitter.updates.push(event.detail.text);
+		bCol.itemEmitter.onupdate = event => bCol.itemEmitter.updates.push(event.detail.text);
 		await aCol.synchronize(bCol); // In this testing mode, first one gets some setup, but doesn't actually wait for sync.
 		await bCol.synchronize(aCol);
 		a = aCol.synchronizers.get(bCol);
@@ -525,15 +525,15 @@ describe('Synchronizer', function () {
 		if (label === 'VersionedCollection') aUpdates = ['abc', ...aUpdates];
 		Credentials.owner = owner;
 		if (a) {
-		  a.collection.onupdate = null;
-		  a.collection.updates.sort(); // The timing of those received during synchronization can be different.
-		  expect(a.collection.updates).toEqual(aUpdates);
+		  a.collection.itemEmitter.onupdate = null;
+		  a.collection.itemEmitter.updates.sort(); // The timing of those received during synchronization can be different.
+		  expect(a.collection.itemEmitter.updates).toEqual(aUpdates);
 		  await clean(a);
 		}
 		if (b) {
-		  b.collection.onupdate = null;
-		  b.collection.updates.sort();
-		  expect(b.collection.updates).toEqual(bUpdates);
+		  b.collection.itemEmitter.onupdate = null;
+		  b.collection.itemEmitter.updates.sort();
+		  expect(b.collection.itemEmitter.updates).toEqual(bUpdates);
 		  await clean(b);
 		}
 		Credentials.owner = null;

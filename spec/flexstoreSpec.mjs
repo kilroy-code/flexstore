@@ -39,20 +39,20 @@ describe('Flexstore', function () {
       let updateCount = 0, latestUpdate;
       beforeAll(async function () {
 	collection = new collectionType({name: 'com.acme' + label, services});
-	collection.onupdate = event => {
+	collection.itemEmitter.onupdate = event => {
 	  updateCount++;
 	  latestUpdate = event.detail;
 	};
 	tag = await collection.store(data);
 	expect(updateCount).toBe(1);
-	expect(latestUpdate.tag).toBe(tag);
+	expect(latestUpdate.subjectTag).toBe(tag);
 	expect(latestUpdate.json).toEqual(data);
       });
       afterAll(async function () {
 	updateCount = 0;
 	await collection.remove({tag});
 	expect(updateCount).toBe(1);
-	expect(latestUpdate.tag).toBe(tag);
+	expect(latestUpdate.subjectTag).toBe(tag);
 	expect(latestUpdate.json).toBeFalsy();
 	const signature = await collection.retrieve(tag);
 	expect(signature?.json).toBeUndefined();
@@ -193,7 +193,7 @@ describe('Flexstore', function () {
 		   expect(firstTag).toBe(newTag);
 		   expect(signature.json).toEqual(newData);
 		   expect(signature.protectedHeader.act).toBe(otherUser);
-		 });
+		   });
   testCollection(VersionedCollection,
 		 // TODO: various cases.
 		 async (firstData, newData, signature, firstTag, newTag, collection) => {
