@@ -3,7 +3,7 @@ const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalTh
 
 // TODO: Demonstrate error on double spend.
 describe('VersionedCollection', function () {
-  let initialData = {foo: 17}, tag, collection = new VersionedCollection({name: 'test'}), initialItemData;
+  let initialData = {foo: 17}, tag, collection = new VersionedCollection({name: 'versionTest'}), initialItemData;
   beforeAll(async function () {
     tag = Credentials.author = await Credentials.create();
     let stored = await collection.store(initialData, {tag});
@@ -11,8 +11,6 @@ describe('VersionedCollection', function () {
     initialItemData = await collection.retrieve(tag);
   });
   afterAll(async function () {
-    await collection.remove(tag);
-    await Credentials.destroy(Credentials.author);
     await collection.destroy();
   });
 
@@ -26,22 +24,30 @@ describe('VersionedCollection', function () {
       }
       versions = await collection.getVersions(tag);
     });
-    it('timestamps is a list of timestamps.', function () {
-      expect(timestamps).toBeInstanceOf(Array);
-      expect(timestamps.every(time => typeof(time) === 'number')).toBeTruthy();
-    });
-    it('versions is an object mapping timestamps to (mostly) hashes.', function () {
-      expect(versions).toBeInstanceOf(Object);
-      const timeKeys = Object.keys(versions);
-      const hashes = Object.values(versions).slice(1); // Skipping the first one, which the latest timestamp.
-      expect(timeKeys.every(time => typeof(time) === 'string')).toBeTruthy();
-      expect(hashes.every(hash => typeof(hash) === 'string')).toBeTruthy();      
-    });
-    it('version has a "latest" that is a timestamp.', function () {
-      expect(versions.latest).toBe(timestamps[timestamps.length - 1]);
+    describe('metadata', function () {
+      it('timestamps is a list of timestamps.', function () {
+	expect(timestamps).toBeInstanceOf(Array);
+	expect(timestamps.every(time => typeof(time) === 'number')).toBeTruthy();
+      });
+      it('versions is an object mapping timestamps to (mostly) hashes.', function () {
+	expect(versions).toBeInstanceOf(Object);
+	const timeKeys = Object.keys(versions);
+	const hashes = Object.values(versions).slice(1); // Skipping the first one, which the latest timestamp.
+	expect(timeKeys.every(time => typeof(time) === 'string')).toBeTruthy();
+	expect(hashes.every(hash => typeof(hash) === 'string')).toBeTruthy();
+      });
+      it('version has a "latest" that is a timestamp.', function () {
+	expect(versions.latest).toBe(timestamps[timestamps.length - 1]);
+      });
     });
 
     describe('version lookup', function () {
+      it('can be by hash.', async function () {
+	const times = Object.keys(versions).slice(1); // Ommitting 'latest'
+	const byTime = await Promise.all(times.map(time => collection.retrieve({tag, time})));
+	const byHash = await Promise.all(times.map(time => collection.retrieve({tag, hash: versions[time]})));
+	byTime.forEach((timeResult, index) => expect(timeResult.text).toBe(byHash[index].text));
+      });
       it('can be by exact timestamp.', async function () {
 	const historicalData = await Promise.all(timestamps.map(time => collection.retrieve({tag, time})));
 	const lastHistorical = historicalData[historicalData.length - 1];
@@ -117,6 +123,7 @@ describe('VersionedCollection', function () {
     let singleData = "single", singleTag, singleHash, singleVersionSignature, singleTimestampsSignature, singleTimestamp;
     let tripleTag, tripleSignatureA, tripleSignatureB;
     let copyA, copyB, copyC, merged, mergedTimestamps;
+    let author, other;
     async function copyAndAddOne(name, author, owner) { // Copy the "single" data over to a new copy, and then store something in the copy.
       const copy = new VersionedCollection({name});
       await copy.versions.put(singleHash, singleVersionSignature);
@@ -134,15 +141,17 @@ describe('VersionedCollection', function () {
     }
 
     beforeAll(async function () {
-      let author = await Credentials.create(), owner = author;
+      author = Credentials.author = await Credentials.create();
+      let owner = author;
+      other = await Credentials.create(); // Not owner.
 
-      singleTag = await collection.store(singleData, {author, owner});
-      const singleVersions = await collection.getVersions(singleTag);
-      singleTimestamp = singleVersions.latest;
-      singleHash = singleVersions[singleTimestamp];
-      singleVersionSignature = await collection.versions.get(singleHash);
-      singleTimestampsSignature = await collection.get(singleTag);
-      
+      singleTag = await collection.store(singleData, {author, owner});    // The toplevel tag at which we stored "single" in collection.
+      const singleVersions = await collection.getVersions(singleTag);     // Originally just one version.
+      singleTimestamp = singleVersions.latest;                            // At this timestamp.
+      singleHash = singleVersions[singleTimestamp];                       // Internally stored in collection.versions at this hash.
+      singleVersionSignature = await collection.versions.get(singleHash); // The signature of that stored version.
+      singleTimestampsSignature = await collection.get(singleTag);        // The signature of timestamp map.
+
       let counter = 1;
       tripleTag = await collection.store(counter, {author, owner});
       await collection.store(++counter, {author, owner, tag: tripleTag});
@@ -150,10 +159,13 @@ describe('VersionedCollection', function () {
       await collection.store(++counter, {author, owner, tag: tripleTag});
       tripleSignatureB = await collection.get(tripleTag);
 
+      // Each copy begins with the same single entry, and then stores another version at singleTag, with the given name.
+      // Each copy thus has two versions at singleTag, where the second version is a different value and timestamp for each copy.
       copyA = await copyAndAddOne('copyA', author, owner);
       copyB = await copyAndAddOne('copyB', author, owner);
       copyC = await copyAndAddOne('copyC', author, owner);
 
+      // Now merge all three into a new empty copy called 'merged'.
       merged = new VersionedCollection({name: 'merged'});
       mergedTimestamps = [
 	singleTimestamp,
@@ -165,19 +177,24 @@ describe('VersionedCollection', function () {
       await merged.put(singleTag, await copyB.get(singleTag));
       await merged.put(singleTag, await copyA.get(singleTag));
       await merged.put(singleTag, await copyC.get(singleTag));
-					
-      await Credentials.destroy(author);
+
+      Credentials.author = other;
     }, 20e3);
     afterAll(async function () {
       await copyA.destroy();
       await copyB.destroy();
       await copyC.destroy();
       await merged.destroy();
+      Credentials.author = null;
+      await Credentials.destroy(other);
+      await Credentials.destroy(author);
     }, 20e3);
     describe('with owner credentials', function () {
       it('creates the union of one history on top of another.', async function () {
-	expect(await merged.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);
-	expect((await merged.retrieve(singleTag)).text).toBe('copyC');
+	const timestamps = await merged.retrieveTimestamps(singleTag);
+	const latest = await merged.retrieve(singleTag);
+	expect(timestamps).toEqual(mergedTimestamps);
+	expect(latest.text).toBe('copyC');
       });
       // it('create the union of multiple separate histories (e.g., as produced by relays that have no ownership).', async function () {
       // });
@@ -231,33 +248,40 @@ describe('VersionedCollection', function () {
 	expect(await copy.getVersions(tripleTag)).toEqual(versions);
 	expect((await copy.retrieve(tripleTag)).text).toBe('3');
 
-	await copy.destroy();	
+	await copy.destroy();
 	
       });
       it('keeps multiple histories separate when they conflict.', async function () {
 
 	// Just like in the signed merged, except that we now have no credentials
 	// Internally, the signature is in two separate, individually signed parts.
-	const unsignedMerged = new VersionedCollection({name: 'unsignedMerged'});
-	await copyVersions(copyA, unsignedMerged);
-	await copyVersions(copyB, unsignedMerged);
-	await copyVersions(copyC, unsignedMerged);
+	const nonMemberHolding = new VersionedCollection({name: 'nonMemberHolding'});
+	await copyVersions(copyA, nonMemberHolding);
+	await copyVersions(copyB, nonMemberHolding);
+	await copyVersions(copyC, nonMemberHolding);
 	// Just for fun, let's put the second one first.
-	await unsignedMerged.put(singleTag, await copyB.get(singleTag));
-	await unsignedMerged.put(singleTag, await copyA.get(singleTag));
-	await unsignedMerged.put(singleTag, await copyC.get(singleTag));
+	await nonMemberHolding.put(singleTag, await copyB.get(singleTag), null, other);
+	await nonMemberHolding.put(singleTag, await copyA.get(singleTag), null, other);
+	await nonMemberHolding.put(singleTag, await copyC.get(singleTag), null, other);
 
-	expect(await unsignedMerged.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);
-	expect((await unsignedMerged.retrieve(singleTag)).text).toBe('copyC');
+	// The nonMemberHolding result is in limbo. It does not have one signal merged set of timestamps.
 	// But we can confirm that it has not been anonymously merged:
-	const timestampSignature = await unsignedMerged.get(singleTag);
-	const timestamps = JSON.parse(timestampSignature);
-	expect(timestamps.length).toBe(3); // unsigned merge of a, b, and c.
+	const timestampVerification = await nonMemberHolding.getVerified(singleTag);
+	const timestamps = timestampVerification.json;
+	expect(timestamps.length).toBe(3); // nonmember merge of a, b, and c.
 	const [a, b] = await Promise.all(timestamps.map(signature => Credentials.verify(signature)));
 	expect(a.json).toBeInstanceOf(Object);
 	expect(b.json).toBeInstanceOf(Object);
 	expect(a.protectedHeader.iat).not.toBe(b.protectedHeader.iat);
-	await unsignedMerged.destroy();
+
+	// And we can merge it properly with authorization.
+	Credentials.author = author;
+	await nonMemberHolding.put(singleTag, timestampVerification.signature);
+	expect(await nonMemberHolding.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);
+	expect((await nonMemberHolding.retrieve(singleTag)).text).toBe('copyC');
+	Credentials.author = null;
+
+	await nonMemberHolding.destroy();
       });
     });
   });
