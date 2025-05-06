@@ -1,18 +1,27 @@
 import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../index.mjs';
-const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalThis;
+const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
 
 // TODO: Demonstrate error on double spend.
 describe('VersionedCollection', function () {
-  let initialData = {foo: 17}, tag, collection = new VersionedCollection({name: 'versionTest'}), initialItemData;
-  beforeAll(async function () {
+  let initialData = {foo: 17}, tag, collection, initialItemData;
+  let collections = [];
+  async function setup(name = 'versionTest') {
+    collection = new VersionedCollection({name});
+    collections.push(collection);
     tag = Credentials.author = await Credentials.create();
     let stored = await collection.store(initialData, {tag});
     expect(stored).toBe(tag);
     initialItemData = await collection.retrieve(tag);
+    return [collection, tag, initialItemData];
+  }
+  beforeAll(async function () {
+    [collection, tag, initialItemData] = await setup();
   });
   afterAll(async function () {
-    await collection.destroy();
-  });
+    for (collection of collections) {
+      await collection.destroy();
+    }
+  }, 10e3);
 
   describe('extended retrieval options', function () {
     let timestamps, versions;
@@ -77,6 +86,10 @@ describe('VersionedCollection', function () {
   });
 
   describe('antecedent', function () {
+    let collection, tag, initialItemData;
+    beforeAll(async function () {
+      [collection, tag, initialItemData] = await setup('antecedentTest');
+    });
     it('is initial numeric.', function () {
       const {ant} = initialItemData.protectedHeader; // Antecedent is the 'ant' header.
       expect(typeof ant).toBe('number');
@@ -253,7 +266,8 @@ describe('VersionedCollection', function () {
       });
       it('keeps multiple histories separate when they conflict.', async function () {
 
-	// Just like in the signed merged, except that we now have no credentials
+	// Just like in the signed merged, except that we now explicitly use a non-member's credentials,
+	// as would be the case on a relay server.
 	// Internally, the signature is in two separate, individually signed parts.
 	const nonMemberHolding = new VersionedCollection({name: 'nonMemberHolding'});
 	await copyVersions(copyA, nonMemberHolding);
