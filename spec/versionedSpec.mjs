@@ -21,11 +21,13 @@ describe('VersionedCollection', function () {
     for (collection of collections) {
       await collection.destroy();
     }
-  }, 10e3);
+  }, 15e3); // As much as five seconds per separate collection?
 
   describe('extended retrieval options', function () {
     let timestamps, versions;
+    let tag, collection, initialItemData;
     beforeAll(async function () {
+      [collection, tag, initialItemData] = await setup('retrievalTests');
       timestamps = await collection.retrieveTimestamps(tag);
       if (timestamps.length < 2) {
 	await collection.store('something', tag);
@@ -287,6 +289,9 @@ describe('VersionedCollection', function () {
 	expect(a.json).toBeInstanceOf(Object);
 	expect(b.json).toBeInstanceOf(Object);
 	expect(a.protectedHeader.iat).not.toBe(b.protectedHeader.iat);
+	// And we can get it to combine timestamps for us without persisting.
+	expect(await nonMemberHolding.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);
+	expect((await nonMemberHolding.retrieve(singleTag)).text).toBe('copyC');
 
 	// And we can merge it properly with authorization.
 	Credentials.author = author;
@@ -296,7 +301,7 @@ describe('VersionedCollection', function () {
 	Credentials.author = null;
 
 	await nonMemberHolding.destroy();
-      });
+      }, 10e3);
     });
   });
 });
