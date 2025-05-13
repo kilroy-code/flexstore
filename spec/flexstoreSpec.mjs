@@ -66,8 +66,8 @@ describe('Flexstore', function () {
 	await expectAsync(collection.store(data, {tag, author: randomUser})).toBeRejected();
       });
       it('retrieves.', async function () {
-	const signature = await collection.retrieve(tag);
-	expect(signature.json).toEqual(data);
+	const verified = await collection.retrieve(tag);
+	expect(verified.json).toEqual(data);
       });
       it('lists.', async function () {
 	expect(await collection.list()).toEqual([tag]);
@@ -84,15 +84,15 @@ describe('Flexstore', function () {
 	  // Store data in whatever tag gets generated as "tag2". Owned by team.
 	  Credentials.owner = team;
 	  Credentials.encryption = 'team';
-	  tag2 = await collection.store(data);
+	  tag2 = await collection.store(data); // store A at tag2 (since reset of updateCount)
 	}, 10e3);
 	afterAll(async function () {
 	  Credentials.encryption = false;
 	  await collection.remove({tag: tag2});
-	  await collection.remove({tag: tag3});	 // May be a no-op.
+	  if (tag3) await collection.remove({tag: tag3});	 // May be a no-op.
 	  const afterList = await collection.list();
 	  expect((await collection.retrieve(tag2))?.json).toBeUndefined();
-	  expect((await collection.retrieve(tag3))?.json).toBeUndefined();	  
+	  if (tag3) expect((await collection.retrieve(tag3))?.json).toBeUndefined();
 	  expect(afterList.length).toBe(1);
 	  Credentials.owner = previousOwner;
 	  expect(updateCount).toBe(4); // 2 successfull stores and 2 removes.
@@ -101,7 +101,7 @@ describe('Flexstore', function () {
 	  const newData = Object.assign({}, data, {birthday: '03/03'});
 	  Credentials.author = otherUser;
 	  // Store slightly different data at the same tag2, by a different member of the same team. restoreCheck will check that the right answer wins.
-	  tag3 = await collection.store(newData, {tag: tag2});
+	  tag3 = await collection.store(newData, {tag: tag2}); // store B at tag2 (since reset of update count)
 	  Credentials.author = user;
 	  const newSignature = await collection.retrieve(tag2);
 	  expect(newSignature.protectedHeader.iss).toBe(team);

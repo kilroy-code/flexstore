@@ -287,6 +287,7 @@ describe('Synchronizer', function () {
 	  expect(b.connection.peer.connectionState).toBe('new');
 	}
       });
+
       describe('basic connection between two peers on the same computer with direct signalling', function () {
 	it('changes state appropriately.', async function () {
 	  await setup({}, {});
@@ -343,6 +344,7 @@ describe('Synchronizer', function () {
 	}, 15e3);
 	function testCollection(kind, label = kind.name) {
 	  describe(label, function () {
+
 	    it('basic sync', async function () {
 	      let aCol = new kind({name: 'a-basic', channelName: 'basic'}),
 		  bCol = new kind({name: 'b-basic', channelName: 'basic'});
@@ -470,8 +472,8 @@ describe('Synchronizer', function () {
 	    describe('complex sync', function () {
 	      let author1, author2, owner, tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8, winningAuthor;
 	      beforeAll(async function () {
-		let aCol = new kind({name: 'a', channelName: 'complex'}),
-		    bCol = new kind({name: 'b', channelName: 'complex'});
+		let aCol = new kind({name: 'a-' + unique, channelName: 'complex'}),
+		    bCol = new kind({name: 'b-' + unique, channelName: 'complex'});
 
 		author1 = Credentials.author;
 		author2 = await Credentials.createAuthor('foo');
@@ -491,8 +493,8 @@ describe('Synchronizer', function () {
 		tag4 = await bCol.store('xyz', {author: author2, owner});
 
 		aCol.itemEmitter.updates = []; bCol.itemEmitter.updates = [];
-		aCol.itemEmitter.onupdate =  event => aCol.itemEmitter.updates.push(event.detail.text);
-		bCol.itemEmitter.onupdate = event => bCol.itemEmitter.updates.push(event.detail.text);
+		aCol.itemEmitter.onupdate =  event => { aCol.itemEmitter.updates.push(event.detail.text); };
+		bCol.itemEmitter.onupdate = event => { bCol.itemEmitter.updates.push(event.detail.text); };
 		await aCol.synchronize(bCol); // In this testing mode, first one gets some setup, but doesn't actually wait for sync.
 		await bCol.synchronize(aCol);
 		a = aCol.synchronizers.get(bCol);
@@ -529,17 +531,20 @@ describe('Synchronizer', function () {
 		  a.collection.itemEmitter.updates.sort(); // The timing of those received during synchronization can be different.
 		  expect(a.collection.itemEmitter.updates).toEqual(aUpdates);
 		  await clean(a);
+		  await a.collection.destroy();
 		}
 		if (b) {
 		  b.collection.itemEmitter.onupdate = null;
 		  b.collection.itemEmitter.updates.sort();
 		  expect(b.collection.itemEmitter.updates).toEqual(bUpdates);
 		  await clean(b);
+		  await b.collection.destroy();
 		}
 		Credentials.owner = null;
 		await Credentials.destroy(owner);
 		await Credentials.destroy({tag: author2, recursiveMembers: true});
 	      }, CONNECT_TIME);
+
 	      it('b gets from pre-sync a.', async function () {
 		expect((await b.collection.retrieve({tag: tag2})).text).toBe('123');
 	      });
@@ -551,8 +556,10 @@ describe('Synchronizer', function () {
 		const matchedA = await a.collection.retrieve({tag: tag1});
 		const matchedB = await b.collection.retrieve({tag: tag1});
 		expect(matchedA.text).toBe(matchedB.text);
+		// These next two are sensitive to current implementation
 		expect(matchedA.protectedHeader.iat).toBe(matchedB.protectedHeader.iat);
 		expect(matchedA.protectedHeader.act).toBe(matchedB.protectedHeader.act);
+
 		expect(matchedA.protectedHeader.iss).toBe(matchedB.protectedHeader.iss);
 		expect(matchedA.protectedHeader.act).toBe(winningAuthor);
 	      });
@@ -564,6 +571,7 @@ describe('Synchronizer', function () {
 		expect((await a.collection.retrieve({tag: tag7})).text).toBe('white');
 		expect((await b.collection.retrieve({tag: tag8})).text).toBe('red');
 	      });
+
 	    });
 	  });
 	}
