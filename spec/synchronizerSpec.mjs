@@ -401,36 +401,44 @@ describe('Synchronizer', function () {
 		await collectionA.disconnect();
 		await collectionB.disconnect();
 	      }, CONNECT_TIME);
-	      it('rendevous can connect.', async function () {
-		const serviceName = new URL('/flexstore/signal/' + unique, baseURL).href;
-		// A and B are talking directly to each other. They are merely connecting through a rendevous
-		const collectionA = new kind({name: 'testRendezvous'});
-		const collectionB = new kind({name: 'testRendezvous', serviceKey: 'secondrendevous'});
-		collectionA.itemEmitter.onupdate = recordUpdates;
-		collectionB.itemEmitter.onupdate = recordUpdates;
-		a = b = null;
+	      describe('rendevous', function () {
+		let collectionA, collectionB, tag;
+		// I'm breaking this into before/test/after parts to try to determine what sometimes fails under load.
+		beforeAll(async function () {
+		  const serviceName = new URL('/flexstore/signal/' + unique, baseURL).href;
+		  // A and B are talking directly to each other. They are merely connecting through a rendevous
+		  collectionA = new kind({name: 'testRendezvous'});
+		  collectionB = new kind({name: 'testRendezvous', serviceKey: 'secondrendevous'});
+		  collectionA.itemEmitter.onupdate = recordUpdates;
+		  collectionB.itemEmitter.onupdate = recordUpdates;
+		  a = b = null;
 
-		collectionA.synchronize(serviceName);
-		collectionB.synchronize(serviceName);
+		  collectionA.synchronize(serviceName);
+		  collectionB.synchronize(serviceName);
+		}, CONNECT_TIME);
+		it('can connect and synchronize.', async function () {
 
-		await collectionA.synchronized;
-		await collectionB.synchronized;
+		  await collectionA.synchronized;
+		  await collectionB.synchronized;
 
-		const tag = await collectionA.store("bar");
-		expect(await collectionB.retrieve(tag)).toBeTruthy(); // Now we know that B has seen the update.
+		  tag = await collectionA.store("bar");
+		  expect(await collectionB.retrieve(tag)).toBeTruthy(); // Now we know that B has seen the update.
 
-		await collectionA.remove({tag});
-		expect(await collectionA.retrieve({tag})).toBeFalsy();
-		await new Promise(resolve => setTimeout(resolve, 1e3)); // give it a chance to propagate
-		expect(await collectionB.retrieve({tag})).toBeFalsy();
-		// Both collections get two events: non-empty text, and then empty text.
-		// Updates events on A have no synchronizer (they came from us).
-		expect(collectionA.itemEmitter.updates).toEqual([['no sync', 'bar'], ['no sync', '']]);
-		// Update events on B have a synchronizer (they came from the peer);
-		expect(collectionB.itemEmitter.updates).toEqual([['sync', 'bar'], ['sync', '']]);
+		  await collectionA.remove({tag});
+		  expect(await collectionA.retrieve({tag})).toBeFalsy();
+		});
+		afterAll(async function () {
+		  await new Promise(resolve => setTimeout(resolve, 1e3)); // give it a chance to propagate
+		  expect(await collectionB.retrieve({tag})).toBeFalsy();
+		  // Both collections get two events: non-empty text, and then empty text.
+		  // Updates events on A have no synchronizer (they came from us).
+		  expect(collectionA.itemEmitter.updates).toEqual([['no sync', 'bar'], ['no sync', '']]);
+		  // Update events on B have a synchronizer (they came from the peer);
+		  expect(collectionB.itemEmitter.updates).toEqual([['sync', 'bar'], ['sync', '']]);
 
-		await collectionA.disconnect(); // Only need one of a directly connected pair
-	      }, CONNECT_TIME);
+		  await collectionA.disconnect(); // Only need one of a directly connected pair
+		});
+	      }, CONNECT_TIME - 1 /* -1 to aid in distinguishing what times out vs beforeAll */);
 	      it('peers can connect by direct transmission of signals (e.g., by qr code).', async function () {
 		// A and B are not talking directly to each other. They are both connecting to a relay.
 		// TODO:
