@@ -154,23 +154,26 @@ describe('Synchronizer', function () {
 	});
       });
 
-      /*x*/xdescribe('rendevous', function () {
+      describe('rendevous', function () {
 	// Here are two different synchronizers on the same computer, that each CONNECT through
 	// a rendevous server to a matching pair of synchronizers (that also happen to be running in this computer).
 	// They will each get their own dataChannel to their peer, and they use different SharedWebRTC connection that we give them
 	// directly, because the default behavior would try to use the same one.
-	let serviceName = new URL('/flexstore/signal/rendevous-test' + unique, baseURL).href;
+
 	// FIXME: let multiplex:'negotiated' come from serviceName
 	let synchronizer1a, synchronizer2a, synchronizer1b, synchronizer2b;
 	beforeAll(async function () {
-	  synchronizer1a = new Synchronizer({serviceName, channelName: 'ImmutableCollection/rendevous-webrtc-1'});
-	  synchronizer2a = new Synchronizer({serviceName, maxVersion: storageVersion+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
+	  const serviceName = new URL('/flexstore/signal/', baseURL).href;
+	  const serviceName1 = serviceName + 'offer/' + unique;
+	  const serviceName2 = serviceName + 'answer/' + unique;
+	  synchronizer1a = new Synchronizer({serviceName: serviceName1, channelName: 'ImmutableCollection/rendevous-webrtc-1'});
+	  synchronizer2a = new Synchronizer({serviceName: serviceName1, maxVersion: storageVersion+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
 
 	  // We want to test as if the next two synchronizers are running in another Javascript.
 	  // So we will have to pass in a separate webrtc.
-	  let connection = new SharedWebRTC({service: serviceName, label: 'secondservice', multiplex: synchronizer1a.connection.multiplex});
-	  synchronizer1b = new Synchronizer({serviceName, connection, channelName: 'ImmutableCollection/rendevous-webrtc-1'});
-	  synchronizer2b = new Synchronizer({serviceName, connection, maxVersion: storageVersion+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
+	  let connection = new SharedWebRTC({service: serviceName2, label: 'secondservice', multiplex: synchronizer1a.connection.multiplex});
+	  synchronizer1b = new Synchronizer({serviceName: serviceName2, connection, channelName: 'ImmutableCollection/rendevous-webrtc-1'});
+	  synchronizer2b = new Synchronizer({serviceName: serviceName2, connection, maxVersion: storageVersion+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
 
 	  synchronizer1a.connectChannel();
 	  synchronizer2a.connectChannel();
@@ -404,42 +407,36 @@ describe('Synchronizer', function () {
 		await collectionA.disconnect();
 		await collectionB.disconnect();
 	      }, CONNECT_TIME);
-	      /*x*/xdescribe('rendevous', function () {
+	      describe('rendevous', function () {
 		let collectionA, collectionB, tag;
 		// I'm breaking this into before/test/after parts to try to determine what sometimes fails under load.
 		beforeAll(async function () {
-		  const serviceName = new URL('/flexstore/signal/' + unique, baseURL).href;
+		  const serviceName = new URL('/flexstore/signal/', baseURL).href;
 		  // A and B are talking directly to each other. They are merely connecting through a rendevous
-		  collectionA = new kind({name: 'testRendezvous', debug: true});
-		  collectionB = new kind({name: 'testRendezvous2', debug: true, // store in a different db than collectionA
-					  channelName: `${kind.name}/testRendezvous`, // but connect to the same channel
+		  collectionA = new kind({name: 'testRendezvous'});
+		  collectionB = new kind({name: 'testRendezvous', // store in a different db than collectionA
+					  //channelName: `${kind.name}/testRendezvous`, // but connect to the same channel
 					  serviceKey: 'secondrendevous'});
 		  collectionA.itemEmitter.onupdate = recordUpdates;
 		  collectionB.itemEmitter.onupdate = recordUpdates;
 		  a = b = null;
 
-		  collectionA.synchronize(serviceName);
-		  collectionB.synchronize(serviceName);
+		  // The router is written such that either the offer or answer can answer first.
+		  // Here we exercise that by seeking the offer before we seek the answer.
+		  collectionB.synchronize(serviceName + 'offer/' + unique);
+		  collectionA.synchronize(serviceName + 'answer/' + unique);
 		}, CONNECT_TIME);
 		it('can connect and synchronize.', async function () {
-		  console.log('synchronize A', collectionA);
 		  await collectionA.synchronized;
-		  console.log('synchronize B', collectionB);		  
 		  await collectionB.synchronized;
-		  console.log('ok');
 
 		  tag = await collectionA.store("bar");
-		  console.log('stored');
 		  expect(await collectionB.retrieve(tag)).toBeTruthy(); // Now we know that B has seen the update.
-		  console.log('retreived');
-
 		  await collectionA.remove({tag});
-		  console.log('removed');
-		  expect(await collectionA.retrieve({tag})).toBeFalsy();
 		}, 10e3);
 		afterAll(async function () {
 		  await delay(1e3); // give it a chance to propagate
-		  console.log({tag});
+		  expect(await collectionA.retrieve({tag})).toBeFalsy();
 		  expect(await collectionB.retrieve({tag})).toBeFalsy();
 		  // Both collections get two events: non-empty text, and then empty text.
 		  // Updates events on A have no synchronizer (they came from us).
@@ -448,8 +445,8 @@ describe('Synchronizer', function () {
 		  expect(collectionB.itemEmitter.updates).toEqual([['sync', 'bar'], ['sync', '']]);
 
 		  await collectionA.disconnect(); // Only need one of a directly connected pair
-		});
-	      }, CONNECT_TIME - 1 /* -1 to aid in distinguishing what times out vs beforeAll */);
+		}, CONNECT_TIME - 1 /* -1 to aid in distinguishing what times out vs beforeAll */);
+	      });
 	      it('peers can connect by direct transmission of signals (e.g., by qr code).', async function () {
 		// A and B are not talking directly to each other. They are both connecting to a relay.
 		// TODO:
