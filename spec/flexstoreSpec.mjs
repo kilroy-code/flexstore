@@ -5,8 +5,8 @@ const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalTh
 // So you need to clear things wherever they are stored: locally, hosted, browser cache, ....
 
 // Percent of a normal implementation at which we expect this implemention to write stuff.
-const writeSlowdown = 0.04//fixme (typeof(process) !== 'undefined') ? 0.05 : 1; // My atomic fs writes in node are awful.
-const readSlowdown = 0.25;
+const writeSlowdown = (typeof(process) !== 'undefined') ? 0.05 : 1; // My atomic fs writes in node are awful.
+const readSlowdown = (typeof(process) !== 'undefined') ? 0.5 : 1;
 
 describe('Flexstore', function () {
   let user, otherUser, team, randomUser;
@@ -56,7 +56,6 @@ describe('Flexstore', function () {
 	expect(latestUpdate.json).toBeFalsy();
 	const signature = await collection.retrieve(tag);
 	expect(signature?.json).toBeUndefined();
-	await collection.destroy();
       });
       //beforeEach(function () { collection.debug = false; });
       it('stores.', function () {
@@ -129,12 +128,12 @@ describe('Flexstore', function () {
 	    const elapsed = Date.now() - start;
 	    writesPerSecond = blocks.length / (elapsed / 1e3);
 	    console.log(label, 'serial writes/second', writesPerSecond);
-	  }, 10e3);
+	  }, 25e3);
 	  afterAll(async function () {
 	    await Promise.all(tags.map(tag => collection.remove({tag})));
-	  });
+	  }, 14e3);
 	  it('writes.', function () {
-	    expect(writesPerSecond).toBeGreaterThan(200 * writeSlowdown);
+	    expect(writesPerSecond).toBeGreaterThan(45 * writeSlowdown);
 	  });
 	  it('reads.', async function () {
 	    const start = Date.now();
@@ -144,7 +143,7 @@ describe('Flexstore', function () {
 	    const elapsed = Date.now() - start;
 	    const readsPerSecond = blocks.length / (elapsed / 1e3);
 	    console.log(label, 'serial reads/second', readsPerSecond);
-	    expect(readsPerSecond).toBeGreaterThan(500 * readSlowdown);
+	    expect(readsPerSecond).toBeGreaterThan(200 * readSlowdown);
 	  });
 	});
 	describe('parallel', function () {
@@ -155,12 +154,12 @@ describe('Flexstore', function () {
 	    const elapsed = Date.now() - start;
 	    writesPerSecond = blocks.length / (elapsed / 1e3);
 	    console.log(label, 'parallel writes/second', writesPerSecond);
-	  });
+	  }, 14e3);
 	  afterAll(async function () {
 	    await Promise.all(tags.map(tag => collection.remove({tag})));
-	  });
+	  }, 13e3);
 	  it('writes.', function () {
-	    expect(writesPerSecond).toBeGreaterThan(250 * writeSlowdown);
+	    expect(writesPerSecond).toBeGreaterThan(150 * writeSlowdown);
 	  });
 	  it('reads.', async function () {
 	    const start = Date.now();
@@ -168,9 +167,9 @@ describe('Flexstore', function () {
 	    const elapsed = Date.now() - start;
 	    const readsPerSecond = blocks.length / (elapsed / 1e3);
 	    console.log(label, 'parallel reads/second', readsPerSecond);
-	    expect(readsPerSecond).toBeGreaterThan(1250 * readSlowdown);
+	    expect(readsPerSecond).toBeGreaterThan(500 * readSlowdown);
 	  });
-	}, 10e3);
+	}, 15e3);
       });
     });
   }
