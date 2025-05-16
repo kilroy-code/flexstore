@@ -22,7 +22,7 @@ describe('Synchronizer', function () {
 	const message = 'echo';
 
 	const url = new URL(`/flexstore/requestDataChannel/test/echo/${tag}`, baseURL);
-	const connection = SharedWebRTC.ensure({service: url.href});
+	const connection = SharedWebRTC.ensure({serviceName: url.href});
 	const dataChannelPromise = connection.createDataChannel('echo');
 	// Send them our signals:
 	const outboundSignals = await connection.signals;
