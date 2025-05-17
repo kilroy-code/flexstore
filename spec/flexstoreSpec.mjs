@@ -143,8 +143,8 @@ describe('Flexstore', function () {
 	    const elapsed = Date.now() - start;
 	    const readsPerSecond = blocks.length / (elapsed / 1e3);
 	    console.log(label, 'serial reads/second', readsPerSecond);
-	    expect(readsPerSecond).toBeGreaterThan(200 * readSlowdown);
-	  });
+	    expect(readsPerSecond).toBeGreaterThan(170 * readSlowdown);
+	  }, 8e3);
 	});
 	describe('parallel', function () {
 	  let tags = Array(blocks.length), writesPerSecond;

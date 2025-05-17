@@ -352,8 +352,8 @@ describe('Synchronizer', function () {
 	  describe(label, function () {
 
 	    it('basic sync', async function () {
-	      let aCol = new kind({name: 'a-basic', channelName: 'basic'}),
-		  bCol = new kind({name: 'b-basic', channelName: 'basic'});
+	      let aCol = new kind({label: 'a-basic', name: 'basic'}),
+		  bCol = new kind({label: 'b-basic', name: 'basic'});
 
 	      const tag1 = await aCol.store('abcd');
 	      const tag2 = await aCol.store('1234');
@@ -414,9 +414,9 @@ describe('Synchronizer', function () {
 		  const serviceName = new URL('/flexstore/signal/', baseURL).href;
 		  // A and B are talking directly to each other. They are merely connecting through a rendevous
 		  collectionA = new kind({name: 'testRendezvous'});
-		  collectionB = new kind({name: 'testRendezvous', // store in a different db than collectionA
-					  //channelName: `${kind.name}/testRendezvous`, // but connect to the same channel
-					  serviceLabel: 'secondrendevous'});
+		  collectionB = new kind({name: 'testRendezvous',
+					  label: 'testRendevous2', // store in a different db than collectionA
+					  serviceLabel: 'secondrendevous'}); // and a different serviceKey
 		  collectionA.itemEmitter.onupdate = recordUpdates;
 		  collectionB.itemEmitter.onupdate = recordUpdates;
 		  a = b = null;
@@ -425,34 +425,33 @@ describe('Synchronizer', function () {
 		  // Here we exercise that by seeking the offer before we seek the answer.
 		  collectionB.synchronize(serviceName + 'offer/' + unique);
 		  collectionA.synchronize(serviceName + 'answer/' + unique);
-		}, CONNECT_TIME);
-		it('can connect and synchronize.', async function () {
 		  await collectionA.synchronized;
 		  await collectionB.synchronized;
-
+		}, CONNECT_TIME);
+		it('can connect and synchronize.', async function () {
 		  tag = await collectionA.store("bar");
+		  await delay(50);
 		  expect(await collectionB.retrieve(tag)).toBeTruthy(); // Now we know that B has seen the update.
 		  await collectionA.remove({tag});
 		}, 10e3);
 		afterAll(async function () {
-		  await delay(1e3); // give it a chance to propagate
+		  await delay(50); // give it a chance to propagate
 		  expect(await collectionA.retrieve({tag})).toBeFalsy();
 		  expect(await collectionB.retrieve({tag})).toBeFalsy();
-		  // Both collections get two events: non-empty text, and then empty text.
-		  // Updates events on A have no synchronizer (they came from us).
+
 		  expect(collectionA.itemEmitter.updates).toEqual([['no sync', 'bar'], ['no sync', '']]);
-		  // Update events on B have a synchronizer (they came from the peer);
 		  expect(collectionB.itemEmitter.updates).toEqual([['sync', 'bar'], ['sync', '']]);
 
-		  await collectionA.disconnect(); // Only need one of a directly connected pair
+		  await collectionA.disconnect(); // Only need one of a pair of peers.
+		  await delay(50);
 		}, CONNECT_TIME - 1 /* -1 to aid in distinguishing what times out vs beforeAll */);
 	      });
 	      it('peers can connect by direct transmission of signals (e.g., by qr code).', async function () {
 		// A and B are not talking directly to each other. They are both connecting to a relay.
 		// TODO:
 		const collectionA = new kind({name: 'testSignals'});
-		const collectionB = new kind({name: 'testSignals2', // store in a different db than collectionA
-					      channelName: `${kind.name}/testSignals`, // but connect to the same channel
+		const collectionB = new kind({name: 'testSignals',
+					      label: 'testSignals2', // store in a different db than collectionA
 					      serviceLabel: 'seconddirect' // and a different serviceKey
 					     });
 		collectionA.itemEmitter.onupdate = recordUpdates;
@@ -492,8 +491,8 @@ describe('Synchronizer', function () {
 	    describe('complex sync', function () {
 	      let author1, author2, owner, tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8, winningAuthor;
 	      beforeAll(async function () {
-		let aCol = new kind({name: 'a-' + unique, channelName: 'complex'}),
-		    bCol = new kind({name: 'b-' + unique, channelName: 'complex'});
+		let aCol = new kind({label: 'a-' + unique, name: 'complex'}),
+		    bCol = new kind({label: 'b-' + unique, name: 'complex'});
 
 		author1 = Credentials.author;
 		author2 = await Credentials.createAuthor('foo');
