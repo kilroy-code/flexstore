@@ -22,7 +22,7 @@ describe('Synchronizer', function () {
 	const message = 'echo';
 
 	const url = new URL(`/flexstore/requestDataChannel/test/echo/${tag}`, baseURL);
-	const connection = SharedWebRTC.ensure({serviceName: url.href});
+	const connection = SharedWebRTC.ensure({serviceLabel: url.href});
 	const dataChannelPromise = connection.createDataChannel('echo');
 	// Send them our signals:
 	const outboundSignals = await connection.signals;
@@ -48,11 +48,11 @@ describe('Synchronizer', function () {
 	  frog, author, owner,
 	  question = "Airspeed?",
 	  answer = "African or Eurpopean?",
-	  service = new URL('/flexstore/sync', baseURL).href;
+	  serviceName = new URL('/flexstore/sync', baseURL).href;
       async function syncAll() { // Synchronize Credentials and frogs with the service.
-	await Credentials.synchronize(service);
+	await Credentials.synchronize(serviceName);
 	await Credentials.synchronized();
-	await collection.synchronize(service);
+	await collection.synchronize(serviceName);
 	await collection.synchronized;
       }
       async function killAll() { // Destroy the frog and all the keys under owner (including local device keys).
@@ -171,7 +171,7 @@ describe('Synchronizer', function () {
 
 	  // We want to test as if the next two synchronizers are running in another Javascript.
 	  // So we will have to pass in a separate webrtc.
-	  let connection = new SharedWebRTC({service: serviceName2, label: 'secondservice', multiplex: synchronizer1a.connection.multiplex});
+	  let connection = new SharedWebRTC({serviceLabel: 'secondservice', multiplex: synchronizer1a.connection.multiplex});
 	  synchronizer1b = new Synchronizer({serviceName: serviceName2, connection, channelName: 'ImmutableCollection/rendevous-webrtc-1'});
 	  synchronizer2b = new Synchronizer({serviceName: serviceName2, connection, maxVersion: storageVersion+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
 
@@ -380,7 +380,7 @@ describe('Synchronizer', function () {
 
 		// A and B are not talking directly to each other. They are both connecting to a relay.
 		const collectionA = new kind({name});
-		const collectionB = new kind({name, serviceKey: 'secondrelay'});
+		const collectionB = new kind({name, serviceLabel: 'secondrelay'});
 		collectionA.itemEmitter.onupdate = recordUpdates;
 		collectionB.itemEmitter.onupdate = recordUpdates;
 		a = b = null;
@@ -416,7 +416,7 @@ describe('Synchronizer', function () {
 		  collectionA = new kind({name: 'testRendezvous'});
 		  collectionB = new kind({name: 'testRendezvous', // store in a different db than collectionA
 					  //channelName: `${kind.name}/testRendezvous`, // but connect to the same channel
-					  serviceKey: 'secondrendevous'});
+					  serviceLabel: 'secondrendevous'});
 		  collectionA.itemEmitter.onupdate = recordUpdates;
 		  collectionB.itemEmitter.onupdate = recordUpdates;
 		  a = b = null;
@@ -453,7 +453,7 @@ describe('Synchronizer', function () {
 		const collectionA = new kind({name: 'testSignals'});
 		const collectionB = new kind({name: 'testSignals2', // store in a different db than collectionA
 					      channelName: `${kind.name}/testSignals`, // but connect to the same channel
-					      serviceKey: 'seconddirect' // and a different serviceKey
+					      serviceLabel: 'seconddirect' // and a different serviceKey
 					     });
 		collectionA.itemEmitter.onupdate = recordUpdates;
 		collectionB.itemEmitter.onupdate = recordUpdates;
