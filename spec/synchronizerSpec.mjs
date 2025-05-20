@@ -1,5 +1,5 @@
 import uuid4 from 'uuid4';
-import { SharedWebRTC, Synchronizer, Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection, storageVersion } from '../index.mjs';
+import { SharedWebRTC, Synchronizer, Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection, storageVersion } from '@kilroy-code/flexstore';
 
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
 

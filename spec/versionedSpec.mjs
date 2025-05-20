@@ -1,4 +1,4 @@
-import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../index.mjs';
+import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '@kilroy-code/flexstore';
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
 
 // TODO: Demonstrate error on double spend.

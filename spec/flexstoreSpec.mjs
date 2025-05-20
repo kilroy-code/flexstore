@@ -1,4 +1,4 @@
-import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '../index.mjs';
+import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '@kilroy-code/flexstore';
 const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalThis;
 
 // N.B.: If a previous failed run was not able to cleanup, there may be old objects owned by old users.
