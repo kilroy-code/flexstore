@@ -171,7 +171,7 @@ describe('Synchronizer', function () {
 
 	  // We want to test as if the next two synchronizers are running in another Javascript.
 	  // So we will have to pass in a separate webrtc.
-	  let connection = new SharedWebRTC({serviceLabel: 'secondservice', multiplex: synchronizer1a.connection.multiplex});
+	  let connection = new SharedWebRTC({serviceLabel: 'secondRendevous1', multiplex: synchronizer1a.connection.multiplex});
 	  synchronizer1b = new Synchronizer({serviceName: serviceName2, connection, channelName: 'ImmutableCollection/rendevous-webrtc-1'});
 	  synchronizer2b = new Synchronizer({serviceName: serviceName2, connection, maxVersion: storageVersion+1, channelName: 'ImmutableCollection/rendevous-webrtc-2'});
 
@@ -416,7 +416,7 @@ describe('Synchronizer', function () {
 		  collectionA = new kind({name: 'testRendezvous'});
 		  collectionB = new kind({name: 'testRendezvous',
 					  label: 'testRendevous2', // store in a different db than collectionA
-					  serviceLabel: 'secondrendevous'}); // and a different serviceKey
+					  serviceLabel: 'secondRendevous2'}); // and a different serviceKey
 		  collectionA.itemEmitter.onupdate = recordUpdates;
 		  collectionB.itemEmitter.onupdate = recordUpdates;
 		  a = b = null;
