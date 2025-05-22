@@ -376,11 +376,11 @@ describe('Synchronizer', function () {
 	      }
 	      it('relay can connect.', async function () {
 		let serviceName = new URL('/flexstore/sync', baseURL).href;
-		let name = 'testRelay' + unique;
+		let name = 'testRelay-' + unique;
 
 		// A and B are not talking directly to each other. They are both connecting to a relay.
 		const collectionA = new kind({name});
-		const collectionB = new kind({name, serviceLabel: 'secondrelay'});
+		const collectionB = new kind({name, label: 'testRelay2-' + unique, serviceLabel: 'secondrelay'});
 		collectionA.itemEmitter.onupdate = recordUpdates;
 		collectionB.itemEmitter.onupdate = recordUpdates;
 		a = b = null;
