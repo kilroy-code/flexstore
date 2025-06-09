@@ -44,7 +44,7 @@ describe('Synchronizer', function () {
     });
     describe('Credentials synchronization and rebuilding', function () {
       // This is more of a system test than a unit test, as there is a lot going on here.
-      let collection = new MutableCollection({name: 'frogs' + unique}),
+      let collection,
 	  frog, author, owner,
 	  question = "Airspeed?",
 	  answer = "African or Eurpopean?",
@@ -64,6 +64,7 @@ describe('Synchronizer', function () {
       beforeAll(async function () {
 	// Setup:
 	// 1. Create an invitation, and immediately claim it.
+	collection = new MutableCollection({name: 'frogs' + unique});
 	await Credentials.ready;
 	author = await Credentials.createAuthor('-'); // Create invite.
 	Credentials.setAnswer(question, answer); // Claiming is a two step process.
@@ -85,6 +86,7 @@ describe('Synchronizer', function () {
 	await Credentials.disconnect();
 	await collection.disconnect();
 	await delay(2e3);
+	await collection.destroy();
 	console.log('synchronization and rebuilding teardown complete');
       }, 10e3);
       describe('recreation', function () {
@@ -252,26 +254,35 @@ describe('Synchronizer', function () {
     }
     async function teardown() {
       await a.disconnect();
+      await a.collection?.destroy();
+      await b.collection?.destroy();
     }
 
     describe('initializations', function () {
-      const collection = new ImmutableCollection({name: 'a'});
+      let collection;
+      let name = 'init';
+      beforeAll(function () {
+	collection = new ImmutableCollection({name});
+      });
+      afterAll(async function () {
+	await collection.destroy();
+      });
       describe('label and url', function () {
 	let a;
 	beforeAll(function () {
-	  a = new Synchronizer({serviceName: 'a', collection});
+	  a = new Synchronizer({serviceName: name, collection});
 	});
 	it('has label.', async function() {
-	  expect(a.label.startsWith('ImmutableCollection/a')).toBeTruthy();
+	  expect(a.label).toContain(`ImmutableCollection/${name}`);
 	});
 	it('has connectionURL.', function () {
-	  expect(a.connectionURL.startsWith(`${a.serviceName}/ImmutableCollection/a`)).toBeTruthy();
+	  expect(a.connectionURL).toContain(`${a.serviceName}/ImmutableCollection/${name}`);
 	});
       });
       describe('hostRequestBase', function () {
 	it('is built on url serviceName', function () {
 	  const a = new Synchronizer({serviceName: base, collection});
-	  expect(makeSynchronizer(a).hostRequestBase).toBe(`${base}/ImmutableCollection/a`);
+	  expect(a.hostRequestBase).toBe(`${base}/ImmutableCollection/${name}`);
 	});
 	it('is empty if serviceName is not a url', function () {
 	  const a = new Synchronizer({serviceName: 'foo', collection});
@@ -337,6 +348,7 @@ describe('Synchronizer', function () {
 	  const list = await synchronizer.collection.list('skipSync');
 	  await Promise.all(list.map(tag => synchronizer.collection.remove({tag})));
 	  expect(await synchronizer.collection.list.length).toBe(0);
+	  synchronizer.collection?.destroy();
 	}
 	let author;
 	beforeAll(async function () {
@@ -406,6 +418,8 @@ describe('Synchronizer', function () {
 
 		await collectionA.disconnect();
 		await collectionB.disconnect();
+		await collectionA.destroy();
+		await collectionB.destroy();
 	      }, CONNECT_TIME);
 	      describe('rendevous', function () {
 		let collectionA, collectionB, tag;
@@ -444,6 +458,8 @@ describe('Synchronizer', function () {
 
 		  await collectionA.disconnect(); // Only need one of a pair of peers.
 		  await delay(50);
+		  await collectionA.destroy();
+		  await collectionB.destroy();
 		}, CONNECT_TIME - 1 /* -1 to aid in distinguishing what times out vs beforeAll */);
 	      });
 	      it('peers can connect by direct transmission of signals (e.g., by qr code).', async function () {
@@ -485,6 +501,8 @@ describe('Synchronizer', function () {
 		expect(collectionB.itemEmitter.updates).toEqual([['sync', 'bar'], ['sync', '']]);
 
 		await collectionA.disconnect();
+		await collectionA.destroy();
+		await collectionB.destroy();
 	      }, CONNECT_TIME);
 	    });
 
@@ -499,41 +517,59 @@ describe('Synchronizer', function () {
 		owner = await Credentials.create(author1, author2);
 
 		const firstWins = label === 'ImmutableCollection';
-		// Immutable: we first store author1 in collection 'a', and that takes precedent over what 'b' says.
+		// Immutable: we first store by author1 in collection 'a', and that takes precedent over what 'b' says.
 		// Mutable: we last store author2 in collection 'a', and that takes precendent over what 'b' said.
 		// Versioned: As with Mutable, but both versions 'abc' have unique antecedent hashes, so both are retained
 		//   (at different timestamps), with the later one taking precedence.
 		const firstCollection = firstWins ? aCol : bCol;
 		const secondCollection = firstWins ? bCol : aCol;
 		winningAuthor = firstWins ? author1 : author2;
-		tag1 = await firstCollection.store('abc', {author: author1, owner});
-		tag2 = await aCol.store('123', {author: author1, owner});
+		tag1 = await firstCollection.store('abc', {author: author1, owner}); // ungWv48Bz...
+		tag2 = await aCol.store('123', {author: author1, owner});            // pmWkWSBCL...
 		tag3 = await secondCollection.store('abc', {author: author2, owner});
-		tag4 = await bCol.store('xyz', {author: author2, owner});
+		tag4 = await bCol.store('xyz', {author: author2, owner});            // Ngi8oeROp...
 
 		aCol.itemEmitter.updates = []; bCol.itemEmitter.updates = [];
 		aCol.itemEmitter.onupdate =  event => { aCol.itemEmitter.updates.push(event.detail.text); };
 		bCol.itemEmitter.onupdate = event => { bCol.itemEmitter.updates.push(event.detail.text); };
+		expect(tag1).toBe(tag3);
+
+		let aList = await aCol.list();
+		let bList = await bCol.list();
+		aList.sort(); bList.sort();
+		console.log({aList, bList, tag1, tag2, tag4});
+		expect(aList).toEqual([tag1, tag2].sort());
+		expect(bList).toEqual([tag1, tag4].sort());
 		await aCol.synchronize(bCol); // In this testing mode, first one gets some setup, but doesn't actually wait for sync.
 		await bCol.synchronize(aCol);
 		a = aCol.synchronizers.get(bCol);
 		b = bCol.synchronizers.get(aCol);
 
 		// Without waiting for synchronization to complete.
-		tag5 = await aCol.store('foo', {author: author1, owner});
-		tag6 = await bCol.store('bar', {author: author2, owner});  // As it happens, a will be pushed tag6 after a completes sync.
+		[tag5, tag6] = await Promise.all([
+		  aCol.store('foo', {author: author1, owner}),  // LCa0a2j_...
+		  bCol.store('bar', {author: author2, owner})  // _N4rLtul... As it happens, a will be pushed tag6 after a completes sync.
+		]);
 
-		expect(await a.completedSynchronization).toBe(2);
-		expect(await b.completedSynchronization).toBe(2);
+		expect(await a.completedSynchronization).toBeGreaterThanOrEqual(1); // receive Ngi8oeROp.., and maybe _N4rLtul..
+		expect(await b.completedSynchronization).toBeGreaterThanOrEqual(2); // receive ungWv48Bz.., pmWkWSBCL.., and maybe LCa0a2j_..
+		// Wait a bit for 'foo' and 'bar' to arrive, and then see if both sides have what we now expect.
+		await delay(1e3);
+		aList = await aCol.list();
+		bList = await bCol.list();
+		let all = [tag1, tag2, tag4, tag5, tag6];
+		aList.sort(); bList.sort(); all.sort();
+		expect(aList).toEqual(all);
+		expect(bList).toEqual(all);
 
 		// Now send some more, after sync.
 		tag7 = await bCol.store('white', {author: author2, owner});
 		tag8 = await aCol.store('red', {author: author1, owner});
 		// After synchronization is complete, we no longer check with the other side when reading,
 		// but instead rely on getting notice from the other side about any updates.
-		// We do not provide any way to check. However, it is entirely reasonable to expect any such updates
+		// We do not provide any way to check. However, it is reasonable to expect any such updates
 		// to arrive within a second.
-		await delay(3e3);
+		await delay(1e3);
 	      }, CONNECT_TIME);
 	      afterAll(async function () {
 		// Both get updates for everything added to either side since connecting: foo, bar, red, white.
@@ -545,20 +581,20 @@ describe('Synchronizer', function () {
 		// For VersionedCollection both sides have a unique 'abc' to tell the other about.
 		if (label === 'VersionedCollection') aUpdates = ['abc', ...aUpdates];
 		Credentials.owner = owner;
-		if (a) {
-		  a.collection.itemEmitter.onupdate = null;
-		  a.collection.itemEmitter.updates.sort(); // The timing of those received during synchronization can be different.
-		  expect(a.collection.itemEmitter.updates).toEqual(aUpdates);
-		  await clean(a);
-		  await a.collection.destroy();
-		}
-		if (b) {
-		  b.collection.itemEmitter.onupdate = null;
-		  b.collection.itemEmitter.updates.sort();
-		  expect(b.collection.itemEmitter.updates).toEqual(bUpdates);
-		  await clean(b);
-		  await b.collection.destroy();
-		}
+
+		a.collection.itemEmitter.onupdate = b.collection.itemEmitter.onupdate = null;
+
+		a.collection.itemEmitter.updates.sort(); // The timing of those received during synchronization can be different.
+		expect(a.collection.itemEmitter.updates).toEqual(aUpdates);
+		await clean(a);
+		await a.collection.destroy();
+
+		b.collection.itemEmitter.updates.sort();
+		let gotB = b.collection.itemEmitter.updates;
+		expect(gotB).toEqual(bUpdates);
+		await clean(b);
+		await b.collection.destroy();
+
 		Credentials.owner = null;
 		await Credentials.destroy(owner);
 		await Credentials.destroy({tag: author2, recursiveMembers: true});

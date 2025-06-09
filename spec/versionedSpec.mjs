@@ -14,26 +14,34 @@ describe('VersionedCollection', function () {
     initialItemData = await collection.retrieve(tag);
     return [collection, tag, initialItemData];
   }
+  let tagToBeCleaned1;
   beforeAll(async function () {
     [collection, tag, initialItemData] = await setup();
+    tagToBeCleaned1 = tag;
   });
   afterAll(async function () {
     for (collection of collections) {
       await collection.destroy();
     }
+    await Credentials.destroy(tagToBeCleaned1);
   }, 15e3); // As much as five seconds per separate collection?
 
   describe('extended retrieval options', function () {
     let timestamps, versions;
     let tag, collection, initialItemData;
+    let tagToBeCleaned2;
     beforeAll(async function () {
       [collection, tag, initialItemData] = await setup('retrievalTests');
+      tagToBeCleaned2 = tag;
       timestamps = await collection.retrieveTimestamps(tag);
       if (timestamps.length < 2) {
 	await collection.store('something', tag);
 	timestamps = await collection.retrieveTimestamps(tag);
       }
       versions = await collection.getVersions(tag);
+    });
+    afterAll(async function () {
+      await Credentials.destroy(tagToBeCleaned2);
     });
     describe('metadata', function () {
       it('timestamps is a list of timestamps.', function () {
@@ -89,8 +97,13 @@ describe('VersionedCollection', function () {
 
   describe('antecedent', function () {
     let collection, tag, initialItemData;
+    let tagToBeCleaned3;
     beforeAll(async function () {
       [collection, tag, initialItemData] = await setup('antecedentTest');
+      tagToBeCleaned3 = tag;
+    });
+    afterAll(async function () {
+      await Credentials.destroy(tagToBeCleaned3);
     });
     it('is initial numeric.', function () {
       const {ant} = initialItemData.protectedHeader; // Antecedent is the 'ant' header.

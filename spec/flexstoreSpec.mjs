@@ -38,7 +38,7 @@ describe('Flexstore', function () {
       let tag, data = {name: 'Alice', birthday: '01/01'};
       let updateCount = 0, latestUpdate;
       beforeAll(async function () {
-	collection = new collectionType({name: 'com.acme' + label, services});
+	collection = new collectionType({name: 'com.acme.' + label, services});
 	collection.itemEmitter.onupdate = event => {
 	  updateCount++;
 	  latestUpdate = event.detail;
@@ -56,6 +56,7 @@ describe('Flexstore', function () {
 	expect(latestUpdate.json).toBeFalsy();
 	const signature = await collection.retrieve(tag);
 	expect(signature?.json).toBeUndefined();
+	await collection.destroy();
       });
       //beforeEach(function () { collection.debug = false; });
       it('stores.', function () {
