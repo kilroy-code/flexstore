@@ -69,12 +69,16 @@ describe('Synchronizer', function () {
 	author = await Credentials.createAuthor('-'); // Create invite.
 	Credentials.setAnswer(question, answer); // Claiming is a two step process.
 	await Credentials.claimInvitation(author, question);
-	// 2. Create an owning group from the frog, that includes the author we just created.
+	let members = (await Credentials.collections.Team.retrieve(author)).json.recipients.map(m => m.header.kid);
+	// 2. Create an owning group for the frog, that includes the author we just created.
 	owner = await Credentials.create(author); // Create owner team with that member.
 	// 3. Store the frog with these credentials.
 	frog = await collection.store({title: 'bull'}, {author, owner}); // Store item with that author/owner
 	// 4. Sychronize to service, disconnect, and REMOVE EVERYTHING LOCALLY.
 	await syncAll();
+	// Before disconnecting, kill the device key on the peer. We're about to blow away the key (in KillAll), and the
+	// device key itself is never synchronized anywhere, so the peer's EncryptionKey will never be of use to anyone.
+	await Credentials.destroy(members[0]);
 	await Credentials.disconnect();
 	await collection.disconnect();
 	await killAll();
@@ -254,8 +258,8 @@ describe('Synchronizer', function () {
     }
     async function teardown() {
       await a.disconnect();
-      await a.collection?.destroy();
-      await b.collection?.destroy();
+      await a.collection.destroy();
+      await b.collection.destroy();
     }
 
     describe('initializations', function () {
@@ -358,6 +362,7 @@ describe('Synchronizer', function () {
 	afterAll(async function () {
 	  a && await clean(a);
 	  b && await clean(b);
+	  a = b = null;
 	  await Credentials.destroy({tag: Credentials.author, recursiveMembers: true});
 	}, 15e3);
 	function testCollection(kind, label = kind.name) {
@@ -537,7 +542,6 @@ describe('Synchronizer', function () {
 		let aList = await aCol.list();
 		let bList = await bCol.list();
 		aList.sort(); bList.sort();
-		console.log({aList, bList, tag1, tag2, tag4});
 		expect(aList).toEqual([tag1, tag2].sort());
 		expect(bList).toEqual([tag1, tag4].sort());
 		await aCol.synchronize(bCol); // In this testing mode, first one gets some setup, but doesn't actually wait for sync.
@@ -587,13 +591,11 @@ describe('Synchronizer', function () {
 		a.collection.itemEmitter.updates.sort(); // The timing of those received during synchronization can be different.
 		expect(a.collection.itemEmitter.updates).toEqual(aUpdates);
 		await clean(a);
-		await a.collection.destroy();
 
 		b.collection.itemEmitter.updates.sort();
 		let gotB = b.collection.itemEmitter.updates;
 		expect(gotB).toEqual(bUpdates);
 		await clean(b);
-		await b.collection.destroy();
 
 		Credentials.owner = null;
 		await Credentials.destroy(owner);

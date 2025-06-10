@@ -1,8 +1,13 @@
 {
   "name": "@kilroy-code/flexstore",
-  "version": "0.0.33",
+  "version": "0.0.34",
   "description": "Safe and private storage replicated between clients and relays, with realtime updates.",
-  "exports": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./spec/flexstoreSpec.mjs": "./spec/flexstoreSpec.mjs",
+    "./spec/versionedSpec.mjs": "./spec/versionedSpec.mjs",
+    "./spec/synchronizerSpec.mjs": "./spec/synchronizerSpec.mjs"
+  },
   "imports": {
     "#wrtc": {
       "node": "@roamhq/wrtc",
