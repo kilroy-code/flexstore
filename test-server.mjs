@@ -4,7 +4,7 @@ import logger from 'morgan';
 import compression from 'compression';
 import flexstoreRouter from '@kilroy-code/flexstore/router';
 
-process.title = 'ki1r0y-test-server';
+process.title = 'ki1r0yflex';
 
 const port = 3000;
 const app = express();
