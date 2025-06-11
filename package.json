@@ -4,6 +4,7 @@
   "description": "Safe and private storage replicated between clients and relays, with realtime updates.",
   "exports": {
     ".": "./index.mjs",
+    "./router": "./lib/router.mjs",
     "./spec/flexstoreSpec.mjs": "./spec/flexstoreSpec.mjs",
     "./spec/versionedSpec.mjs": "./spec/versionedSpec.mjs",
     "./spec/synchronizerSpec.mjs": "./spec/synchronizerSpec.mjs"
@@ -15,7 +16,11 @@
     }
   },
   "scripts": {
-    "test": "jasmine",
+    "start": "node test-server.mjs",
+    "stop": "pkill ki1r0y-test-server; sleep 1",
+    "background": "npm stop; (nohup npm start 1>test-server.log 2>&1 &)",
+    "test-client": "jasmine",
+    "test": "npm run background && npm run test-client && npm stop",
     "build": "rollup -c",
     "build-dev": "npx rollup -c --environment NODE_ENV:development"
   },
@@ -48,14 +53,16 @@
   "dependencies": {
     "@ki1r0y/distributed-security": "^1.2.2",
     "@ki1r0y/storage": "^1.0.3",
-    "@roamhq/wrtc": "^0.8.0",
-    "uuid4": "^2.0.3"
+    "@roamhq/wrtc": "^0.8.0"
   },
   "devDependencies": {
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "16.0.1",
     "@rollup/plugin-terser": "^0.4.4",
-    "jasmine": "^5.7.1",
-    "rollup": "4.41.1"
+    "compression": "^1.8.0",
+    "express": "^5.1.0",
+    "jasmine": "^4.6.0",
+    "rollup": "4.41.1",
+    "uuid4": "^2.0.3"
   }
 }
