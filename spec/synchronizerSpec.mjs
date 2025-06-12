@@ -57,6 +57,12 @@ describe('Synchronizer', function () {
 	await Credentials.synchronized();
 	await collection.synchronize(serviceName);
 	await collection.synchronized;
+	console.log('hrs sync', (await Promise.all(Object.values(Credentials.collections)
+				       .concat(collection)
+				       .map(async c => {
+					 const s = c.synchronizers.get(serviceName);
+					 return `${c.name}: in: ${await s.completedSynchronization}, out: ${await s.peerCompletedSynchronization}`;
+				       }))).join('; '));
       }
       async function killAll() { // Destroy the frog and all the keys under owner (including local device keys).
 	expect(await collection.retrieve({tag: frog})).toBeTruthy(); // Now you see it...
