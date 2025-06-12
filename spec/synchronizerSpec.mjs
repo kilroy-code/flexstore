@@ -1,4 +1,5 @@
 import uuid4 from 'uuid4';
+import * as fs from 'node:fs/promises'; // fixme remove 
 import { SharedWebRTC, Synchronizer, Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection, storageVersion } from '@kilroy-code/flexstore';
 
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
@@ -73,6 +74,9 @@ describe('Synchronizer', function () {
 	expect(await collection.retrieve({tag: frog})).toBe(''); // ... and now you don't.
 	console.log('finish killAll');	
       }
+      async function readOnServer(label, tag) {
+	console.log(label, !!await fs.readFile(`ServerStorage/MutableCollection/KeyRecovery/${tag}`, 'utf8').catch(() => ''));
+      }
       beforeAll(async function () {
 	// Setup:
 	// 1. Create an invitation, and immediately claim it.
@@ -95,12 +99,17 @@ describe('Synchronizer', function () {
 	frog = await collection.store({title: 'bull'}, {author, owner}); // Store item with that author/owner
 	// 4. Sychronize to service, disconnect, and REMOVE EVERYTHING LOCALLY.
 	await syncAll();
+	//await readOnServer('after initial sync', recovery);
 	// Before disconnecting, kill the device key on the peer. We're about to blow away the key (in KillAll), and the
 	// device key itself is never synchronized anywhere, so the peer's EncryptionKey will never be of use to anyone.
 	await Credentials.destroy(members[0]);
+	const fixme = Credentials.collections.KeyRecovery.synchronizers.get(serviceName);
 	await Credentials.disconnect();
 	await collection.disconnect();
+	console.log('client KeyRecovery', Credentials.collections.KeyRecovery.synchronizers, fixme.connection?.peer?.connectionState);
+	//await readOnServer('before kill', recovery);
 	await killAll();
+	//await readOnServer('after kill', recovery);	
 	console.log('synchronization and rebuilding setup complete');
       }, 2 * CONNECT_TIME);
       afterAll(async function () {
