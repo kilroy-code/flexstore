@@ -52,7 +52,7 @@
   "homepage": "https://github.com/kilroy-code/flexstore#readme",
   "dependencies": {
     "@ki1r0y/distributed-security": "^1.2.2",
-    "@ki1r0y/storage": "^1.0.4",
+    "@ki1r0y/storage": "^1.0.5",
     "@roamhq/wrtc": "^0.8.0"
   },
   "devDependencies": {
