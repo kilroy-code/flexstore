@@ -20,7 +20,7 @@
     "stop": "pkill ki1r0yflex; sleep 1",
     "background": "npm stop; (nohup npm start 1>test-server.log 2>&1 &)",
     "test-client": "jasmine",
-    "test": "npm run background && npm run test-client && npm stop",
+    "test": "npm run background && sleep 1 && npm run test-client && npm stop",
     "build": "rollup -c",
     "build-dev": "npx rollup -c --environment NODE_ENV:development"
   },
