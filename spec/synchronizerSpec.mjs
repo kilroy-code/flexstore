@@ -13,6 +13,9 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+jasmine.getEnv().addReporter({ specStarted: result => console.log(`Test: "${result.fullName}".  `) });
+
+
 describe('Synchronizer', function () {
 
   describe('server relay', function () {
@@ -45,7 +48,7 @@ describe('Synchronizer', function () {
     describe('Credentials synchronization and rebuilding', function () {
       // This is more of a system test than a unit test, as there is a lot going on here.
       let collection,
-	  frog, author, owner,
+	  frog, author, owner, recovery,
 	  question = "Airspeed?",
 	  answer = "African or Eurpopean?",
 	  serviceName = new URL('/flexstore/sync', baseURL).href;
@@ -58,7 +61,7 @@ describe('Synchronizer', function () {
       async function killAll() { // Destroy the frog and all the keys under owner (including local device keys).
 	expect(await collection.retrieve({tag: frog})).toBeTruthy(); // Now you see it...
 	await collection.remove({tag: frog, author, owner});
-	await Credentials.destroy({tag: owner, recursiveMembers: true});
+	//await Credentials.destroy({tag: owner, recursiveMembers: true});
 	expect(await collection.retrieve({tag: frog})).toBe(''); // ... and now you don't.
       }
       beforeAll(async function () {
@@ -70,6 +73,13 @@ describe('Synchronizer', function () {
 	Credentials.setAnswer(question, answer); // Claiming is a two step process.
 	await Credentials.claimInvitation(author, question);
 	let members = (await Credentials.collections.Team.retrieve(author)).json.recipients.map(m => m.header.kid);
+	recovery = members[1];	
+	console.log({members, recovery,
+		     m0R: await Credentials.collections.KeyRecovery.get(members[0]),
+		     m1R: await Credentials.collections.KeyRecovery.get(members[1]),
+		     m0Rv: await Credentials.collections.KeyRecovery.retrieve(members[0]),
+		     m1Rv: await Credentials.collections.KeyRecovery.retrieve(members[1])
+		    });
 	// 2. Create an owning group for the frog, that includes the author we just created.
 	owner = await Credentials.create(author); // Create owner team with that member.
 	// 3. Store the frog with these credentials.
@@ -89,19 +99,31 @@ describe('Synchronizer', function () {
 	await delay(2e3);
 	await Credentials.disconnect();
 	await collection.disconnect();
-	await delay(2e3);
 	await collection.destroy();
 	console.log('synchronization and rebuilding teardown complete');
       }, 10e3);
       describe('recreation', function () {
-	let firstVerified;
+	let verifiedFrog, verifiedOwner, verifiedAuthor, verifiedRecovery;
 	beforeAll(async function () { // Pull into this empty local storage, as if on a new machine.
 	  await syncAll();
 	  Credentials.setAnswer(question, answer);
-	  firstVerified = await collection.retrieve({tag: frog});
+	  verifiedFrog = await collection.retrieve({tag: frog});
+	  verifiedOwner = await Credentials.collections.Team.retrieve(owner);
+	  verifiedAuthor = await Credentials.collections.Team.retrieve(author);
+	  verifiedRecovery = await Credentials.collections.KeyRecovery.retrieve(recovery);
+	  console.log({verifiedFrog, verifiedOwner, verifiedAuthor, verifiedRecovery});
 	}, CONNECT_TIME);
 	it('has collection.', async function () {
-	  expect(firstVerified.json).toEqual({title: 'bull'}); // We got the data.
+	  expect(verifiedFrog.json).toEqual({title: 'bull'}); // We got the data.
+	});
+	it('has owner.', async function () {
+	  expect(verifiedOwner.json).toBeTruthy();
+	});
+	it('has author.', async function () {
+	  expect(verifiedAuthor.json).toBeTruthy();
+	});
+	it('has recovery.', async function () {
+	  expect(verifiedRecovery.text).toBeTruthy();
 	});
 	it('can re-store because we have the credentials.', async function () {
 	  await collection.store({title: 'leopard'}, {tag: frog, author, owner});
@@ -352,18 +374,22 @@ describe('Synchronizer', function () {
 	  const list = await synchronizer.collection.list('skipSync');
 	  await Promise.all(list.map(tag => synchronizer.collection.remove({tag})));
 	  expect(await synchronizer.collection.list.length).toBe(0);
-	  synchronizer.collection?.destroy();
+	  //fixme await synchronizer.collection?.destroy();
 	}
 	let author;
 	beforeAll(async function () {
+	  console.log('start authorized before');
 	  author = Credentials.author = await Credentials.createAuthor('test pin:');
 	  Credentials.owner = '';
+	  console.log('end authorized before');	  
 	}, 10e3);
 	afterAll(async function () {
+	  console.log('start authorized after');
 	  a && await clean(a);
 	  b && await clean(b);
 	  a = b = null;
 	  await Credentials.destroy({tag: Credentials.author, recursiveMembers: true});
+	  console.log('end authorized after');	  
 	}, 15e3);
 	function testCollection(kind, label = kind.name) {
 	  describe(label, function () {
