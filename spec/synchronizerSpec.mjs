@@ -109,10 +109,9 @@ describe('Synchronizer', function () {
 	  await syncAll();
 	  Credentials.setAnswer(question, answer);
 	  verifiedFrog = await collection.retrieve({tag: frog});
-	  verifiedOwner = !!await Credentials.collections.Team.retrieve(owner);
-	  verifiedAuthor = !!await Credentials.collections.Team.retrieve(author);
-	  verifiedRecovery = !!await Credentials.collections.KeyRecovery.retrieve(recovery);
-	  console.log({verifiedFrog: !!verifiedFrog, verifiedOwner, verifiedAuthor, verifiedRecovery});
+	  verifiedOwner = await Credentials.collections.Team.retrieve(owner);
+	  verifiedAuthor = await Credentials.collections.Team.retrieve(author);
+	  verifiedRecovery = await Credentials.collections.KeyRecovery.retrieve(recovery);
 	}, CONNECT_TIME);
 	it('has collection.', async function () {
 	  expect(verifiedFrog.json).toEqual({title: 'bull'}); // We got the data.
@@ -379,18 +378,14 @@ describe('Synchronizer', function () {
 	}
 	let author;
 	beforeAll(async function () {
-	  console.log('start authorized before');
 	  author = Credentials.author = await Credentials.createAuthor('test pin:');
 	  Credentials.owner = '';
-	  console.log('end authorized before');	  
 	}, 10e3);
 	afterAll(async function () {
-	  console.log('start authorized after');
 	  a && await clean(a);
 	  b && await clean(b);
 	  a = b = null;
 	  await Credentials.destroy({tag: Credentials.author, recursiveMembers: true});
-	  console.log('end authorized after');	  
 	}, 15e3);
 	function testCollection(kind, label = kind.name) {
 	  describe(label, function () {
