@@ -87,7 +87,6 @@ describe('Synchronizer', function () {
 	// Before disconnecting, kill the device key on the peer. We're about to blow away the key (in KillAll), and the
 	// device key itself is never synchronized anywhere, so the peer's EncryptionKey will never be of use to anyone.
 	await Credentials.destroy(device);
-	const fixme = Credentials.collections.KeyRecovery.synchronizers.get(serviceName);
 	await Credentials.disconnect();
 	await collection.disconnect();
 	await killAll();
@@ -370,7 +369,7 @@ describe('Synchronizer', function () {
 	  const list = await synchronizer.collection.list('skipSync');
 	  await Promise.all(list.map(tag => synchronizer.collection.remove({tag})));
 	  expect(await synchronizer.collection.list.length).toBe(0);
-	  //fixme await synchronizer.collection?.destroy();
+	  await synchronizer.collection?.destroy();
 	}
 	let author;
 	beforeAll(async function () {
