@@ -1,5 +1,4 @@
 import uuid4 from 'uuid4';
-import { dumpFile } from '../dumpFile.mjs';
 import { SharedWebRTC, Synchronizer, Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection, storageVersion } from '@kilroy-code/flexstore';
 
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
@@ -85,16 +84,13 @@ describe('Synchronizer', function () {
 	frog = await collection.store({title: 'bull'}, {author, owner}); // Store item with that author/owner
 	// 4. Sychronize to service, disconnect, and REMOVE EVERYTHING LOCALLY.
 	await syncAll();
-	//await dumpFile('after initial sync', recovery, 'ServerStorage');
 	// Before disconnecting, kill the device key on the peer. We're about to blow away the key (in KillAll), and the
 	// device key itself is never synchronized anywhere, so the peer's EncryptionKey will never be of use to anyone.
 	await Credentials.destroy(device);
 	const fixme = Credentials.collections.KeyRecovery.synchronizers.get(serviceName);
 	await Credentials.disconnect();
 	await collection.disconnect();
-	//await dumpFile('before kill', recovery, 'ServerStorage');
 	await killAll();
-	//await dumpFile('after kill', recovery, 'ServerStorage');	
       }, 2 * CONNECT_TIME);
       afterAll(async function () {
 	await killAll(); // Locally and on on-server, because we're still connected.
