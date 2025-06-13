@@ -14,8 +14,7 @@ function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-jasmine.getEnv().addReporter({ specStarted: result => console.log(`Test: "${result.fullName}".  `) });
-
+//jasmine.getEnv().addReporter({ specStarted: result => console.log(`Test: "${result.fullName}".  `) });
 
 describe('Synchronizer', function () {
 
@@ -54,25 +53,16 @@ describe('Synchronizer', function () {
 	  answer = "African or Eurpopean?",
 	  serviceName = new URL('/flexstore/sync', baseURL).href;
       async function syncAll() { // Synchronize Credentials and frogs with the service.
-	console.log('start syncAll');	
 	await Credentials.synchronize(serviceName);
 	await Credentials.synchronized();
 	await collection.synchronize(serviceName);
 	await collection.synchronized;
-	console.log('finish syncAll', (await Promise.all(Object.values(Credentials.collections)
-				       .concat(collection)
-				       .map(async c => {
-					 const s = c.synchronizers.get(serviceName);
-					 return `${c.name}: in: ${await s.completedSynchronization}, out: ${await s.peerCompletedSynchronization}`;
-				       }))).join('; '));
       }
       async function killAll() { // Destroy the frog and all the keys under owner (including local device keys).
-	console.log('start killAll');
 	expect(await collection.retrieve({tag: frog})).toBeTruthy(); // Now you see it...
 	await collection.remove({tag: frog, author, owner});
 	await Credentials.destroy({tag: owner, recursiveMembers: true});
 	expect(await collection.retrieve({tag: frog})).toBe(''); // ... and now you don't.
-	console.log('finish killAll');	
       }
       beforeAll(async function () {
 	// Setup:
@@ -89,32 +79,22 @@ describe('Synchronizer', function () {
 	  [recovery, device] = members;
 	  expect(await Credentials.collections.KeyRecovery.get(recovery)).toBeTruthy();
 	}
-	console.log({members, recovery,
-		     // m0R: await Credentials.collections.KeyRecovery.get(members[0]),
-		     // m1R: await Credentials.collections.KeyRecovery.get(members[1]),
-		     // m0Rv: await Credentials.collections.KeyRecovery.retrieve(members[0]),
-		     // m1Rv: await Credentials.collections.KeyRecovery.retrieve(members[1])
-		    });
 	// 2. Create an owning group for the frog, that includes the author we just created.
 	owner = await Credentials.create(author); // Create owner team with that member.
 	// 3. Store the frog with these credentials.
 	frog = await collection.store({title: 'bull'}, {author, owner}); // Store item with that author/owner
 	// 4. Sychronize to service, disconnect, and REMOVE EVERYTHING LOCALLY.
-	Credentials.collections.KeyRecovery.debug = true;
 	await syncAll();
-	Credentials.collections.KeyRecovery.debug = false;	
-	await dumpFile('after initial sync', recovery, 'ServerStorage');
+	//await dumpFile('after initial sync', recovery, 'ServerStorage');
 	// Before disconnecting, kill the device key on the peer. We're about to blow away the key (in KillAll), and the
 	// device key itself is never synchronized anywhere, so the peer's EncryptionKey will never be of use to anyone.
 	await Credentials.destroy(device);
 	const fixme = Credentials.collections.KeyRecovery.synchronizers.get(serviceName);
 	await Credentials.disconnect();
 	await collection.disconnect();
-	console.log('client KeyRecovery', Credentials.collections.KeyRecovery.synchronizers, fixme.connection?.peer?.connectionState);
-	await dumpFile('before kill', recovery, 'ServerStorage');
+	//await dumpFile('before kill', recovery, 'ServerStorage');
 	await killAll();
-	await dumpFile('after kill', recovery, 'ServerStorage');	
-	console.log('synchronization and rebuilding setup complete');
+	//await dumpFile('after kill', recovery, 'ServerStorage');	
       }, 2 * CONNECT_TIME);
       afterAll(async function () {
 	await killAll(); // Locally and on on-server, because we're still connected.
@@ -122,7 +102,6 @@ describe('Synchronizer', function () {
 	await Credentials.disconnect();
 	await collection.disconnect();
 	await collection.destroy();
-	console.log('synchronization and rebuilding teardown complete');
       }, 10e3);
       describe('recreation', function () {
 	let verifiedFrog, verifiedOwner, verifiedAuthor, verifiedRecovery;
