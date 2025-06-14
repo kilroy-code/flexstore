@@ -39,6 +39,7 @@ describe('VersionedCollection', function () {
 	timestamps = await collection.retrieveTimestamps(tag);
       }
       versions = await collection.getVersions(tag);
+      const contents = await Promise.all(Object.values(versions).map(hash => collection.versions.retrieve(hash)));
     });
     afterAll(async function () {
       await Credentials.destroy(tagToBeCleaned2);
@@ -63,9 +64,12 @@ describe('VersionedCollection', function () {
     describe('version lookup', function () {
       it('can be by hash.', async function () {
 	const times = Object.keys(versions).slice(1); // Ommitting 'latest'
+	const hashes = Object.values(versions).slice(1);
 	const byTime = await Promise.all(times.map(time => collection.retrieve({tag, time})));
-	const byHash = await Promise.all(times.map(time => collection.retrieve({tag, hash: versions[time]})));
+	const byHash = await Promise.all(hashes.map(hash => collection.retrieve({tag, hash})));
+	const byInternal = await Promise.all(hashes.map(hash => collection.versions.retrieve({tag: hash})));
 	byTime.forEach((timeResult, index) => expect(timeResult.text).toBe(byHash[index].text));
+	byHash.forEach((hashResult, index) => expect(hashResult.text).toBe(byInternal[index].text));
       });
       it('can be by exact timestamp.', async function () {
 	const historicalData = await Promise.all(timestamps.map(time => collection.retrieve({tag, time})));
