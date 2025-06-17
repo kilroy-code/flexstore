@@ -73,12 +73,13 @@ describe('VersionedCollection', function () {
       });
       it('can be by exact timestamp.', async function () {
 	const historicalData = await Promise.all(timestamps.map(time => collection.retrieve({tag, time})));
+	const historicalStamps = historicalData.map(validation => validation.protectedHeader.iat);
+	expect(historicalStamps).toEqual(timestamps);
 	const lastHistorical = historicalData[historicalData.length - 1];
 	const latestData = await collection.retrieve({tag}); // No time specified.
-	expect(historicalData.every(validation => typeof(validation.text))).toBeTruthy();
 	expect(historicalData[0].json).toEqual(initialData);
 	expect(lastHistorical.text).toEqual(latestData.text);
-	expect(historicalData.every((validation, index) => validation.protectedHeader.iat === timestamps[index])).toBeTruthy();
+	expect(historicalData.every(validation => typeof(validation.text))).toBeTruthy();
       });
       it('can be before the first write, but will produce no result.', async function () {
 	expect(await collection.retrieve({tag, time: timestamps[0] - 1})).toBeFalsy();
