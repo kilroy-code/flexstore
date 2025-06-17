@@ -6,7 +6,7 @@ const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expect
 Object.assign(globalThis, {Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection, SharedWebRTC}); // for debugging
 const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 
-const CONNECT_TIME = 50e3; // normally
+const CONNECT_TIME = 20e3;
 const unique = uuid4();
 
 function delay(ms) {
@@ -90,7 +90,7 @@ describe('Synchronizer', function () {
 	await Credentials.disconnect();
 	await collection.disconnect();
 	await killAll();
-      }, 2 * CONNECT_TIME);
+      }, CONNECT_TIME);
       afterAll(async function () {
 	await killAll(); // Locally and on on-server, because we're still connected.
 	await delay(2e3);
@@ -449,8 +449,8 @@ describe('Synchronizer', function () {
 		beforeAll(async function () {
 		  const serviceName = new URL('/flexstore/signal/', baseURL).href;
 		  // A and B are talking directly to each other. They are merely connecting through a rendevous
-		  collectionA = new kind({name: 'testRendezvous'});
-		  collectionB = new kind({name: 'testRendezvous',
+		  collectionA = new kind({name: 'testRendezvous' + unique});
+		  collectionB = new kind({name: 'testRendezvous' + unique,
 					  label: 'testRendevous2', // store in a different db than collectionA
 					  serviceLabel: 'secondRendevous2'}); // and a different serviceKey
 		  collectionA.itemEmitter.onupdate = recordUpdates;
@@ -478,6 +478,9 @@ describe('Synchronizer', function () {
 		  expect(collectionA.itemEmitter.updates).toEqual([['no sync', 'bar'], ['no sync', '']]);
 		  expect(collectionB.itemEmitter.updates).toEqual([['sync', 'bar'], ['sync', '']]);
 
+		  // Remove items on server.
+		  await Promise.all((await collectionA.list()).map(tag => collectionA.remove(tag)));
+		  await delay(50);
 		  await collectionA.disconnect(); // Only need one of a pair of peers.
 		  await delay(50);
 		  await collectionA.destroy();
