@@ -323,7 +323,7 @@ class SharedWebRTC extends PromiseWebRTC {
 }
 
 var name$1 = "@kilroy-code/flexstore";
-var version$1 = "0.0.42";
+var version$1 = "0.0.42-debug";
 var _package = {
 	name: name$1,
 	version: version$1};
