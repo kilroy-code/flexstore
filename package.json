@@ -1,6 +1,6 @@
 {
   "name": "@kilroy-code/flexstore",
-  "version": "0.0.42-debug",
+  "version": "0.0.42-debug.2",
   "description": "Safe and private storage replicated between clients and relays, with realtime updates.",
   "exports": {
     ".": "./index.mjs",
