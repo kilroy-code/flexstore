@@ -425,7 +425,9 @@ describe('Synchronizer', function () {
 		await collectionB.synchronized;
 
 		const tag = await collectionA.store("foo");
-		await delay(1e3); // give it a chance to propagate
+		expect(await collectionB.retrieve(tag)).toBeTruthy(); // A will have it right away.
+		await delay(3e3); // give it a chance to propagate. 3 seconds is nuts, but that seems to be needed on Safari!
+		// TBD: is it that long before we get the update is emitted, or is is this something to do with how cache.put works on Safari?
 		expect(await collectionB.retrieve(tag)).toBeTruthy(); // Now we know that B has seen the update.
 
 		await collectionA.remove({tag});
