@@ -460,8 +460,8 @@ describe('Synchronizer', function () {
 
 		  // The router is written such that either the offer or answer can answer first.
 		  // Here we exercise that by seeking the offer before we seek the answer.
-		  collectionB.synchronize(serviceName + 'offer/' + unique);
-		  collectionA.synchronize(serviceName + 'answer/' + unique);
+		  collectionB.synchronize(serviceName + 'offer/X' + unique);
+		  collectionA.synchronize(serviceName + 'answer/X' + unique);
 		  await collectionA.synchronized;
 		  await collectionB.synchronized;
 		}, CONNECT_TIME);
