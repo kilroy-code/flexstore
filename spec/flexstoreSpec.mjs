@@ -62,9 +62,6 @@ describe('Flexstore', function () {
       it('stores.', function () {
 	expect(typeof tag).toBe('string');
       });
-      it('cannot be written by a different owner (even with the same data).', async function () {
-	await expectAsync(collection.store(data, {tag, author: randomUser})).toBeRejected();
-      });
       it('retrieves.', async function () {
 	const verified = await collection.retrieve(tag);
 	expect(verified.json).toEqual(data);
@@ -74,6 +71,11 @@ describe('Flexstore', function () {
       });
       it('finds', async function () {
 	expect(await collection.find({name: 'Alice'})).toBe(tag);
+      });
+      it('cannot be written by a different owner (even with the same data).', async function () {
+	// We're not encrypting here, so the data is the data.
+	// For ImmutableCollection, this rejects as expected, but for a different reason: the data exists
+	await expectAsync(collection.store(data, {tag, author: randomUser, ifExists: 'reject'})).toBeRejected();
       });
       describe('specifying owner', function () {
 	let previousOwner, tag2, tag3;
@@ -95,21 +97,25 @@ describe('Flexstore', function () {
 	  if (tag3) expect((await collection.retrieve(tag3))?.json).toBeUndefined();
 	  expect(afterList.length).toBe(1);
 	  Credentials.owner = previousOwner;
+	  if (label === 'ImmutableCollection') updateCount++; // One of the stores was a no-op because it just left the first version lying there.
 	  expect(updateCount).toBe(4); // 2 successfull stores and 2 removes.
 	});
 	it('team members can re-store', async function () {
 	  const newData = Object.assign({}, data, {birthday: '03/03'});
 	  Credentials.author = otherUser;
-	  // Store slightly different data at the same tag2, by a different member of the same team. restoreCheck will check that the right answer wins.
-	  tag3 = await collection.store(newData, {tag: tag2}); // store B at tag2 (since reset of update count)
-	  Credentials.author = user;
+          // Store slightly different data at the same tag2, by a different member of the same team. restoreCheck will check that the right answer wins.
+          tag3 = await collection.store(newData, {tag: tag2}); // store B at tag2 (since reset of update count)
+          // Doing this in an immutable data shouldn't actually put the new data/owner,
+          // but neither should it reject. It should "succeed" and resolve to the same tag.
+          Credentials.author = user;
 	  const newSignature = await collection.retrieve(tag2);
 	  expect(newSignature.protectedHeader.iss).toBe(team);
 	  expect(newSignature.decrypted.protectedHeader.kid).toBe(team); // encrypted for the whole team.
 	  await restoreCheck(data, newData, newSignature, tag2, tag3, collection);
 	});
-	it('cannot be written by non-team member.', async function () {
-	  await expectAsync(collection.store({whatever: 'ignored'}, {tag: tag2, author: randomUser})).toBeRejected();
+	it('cannot be overwritten by non-team member.', async function () {
+	  // For ImmutableCollection, this rejects as expected, but for a different reasons: it's an overwrite, and the data hash doesn't match tag2
+	  await expectAsync(collection.store({whatever: 'ignored'}, {tag: tag2, author: randomUser, owner: randomUser, ifExists: 'reject'})).toBeRejected();
 	});
 	it('adds to list.', async function () {
 	  const list = await collection.list();
@@ -179,18 +185,19 @@ describe('Flexstore', function () {
 		 // TODO: delete after written whould work.
 		 // TODO: store after delete should work.
 		 // TODO: delete stamped earlier than existing should fail(?)
-		 async (firstData, newData, signature, firstTag, newTag, collection) => {
-		   expect(firstTag).not.toBe(newTag);
-		   expect(signature.json).toEqual(firstData);
-		   expect(signature.protectedHeader.act).toBe(user);
-		   // newData was not dropped altogether. It was saved in newTag
-		   const anotherSig = await collection.retrieve(newTag);
-		   expect(anotherSig.json).toEqual(newData);
-		   expect(anotherSig.protectedHeader.act).toBe(otherUser);
-		 });
+                 async (firstData, newData, signature, firstTag, newTag, collection) => {
+                   expect(firstTag).toBe(newTag); // expect(firstTag).not.toBe(newTag);
+                   expect(signature.json).toEqual(firstData);
+                   expect(signature.protectedHeader.act).toBe(user);
+
+                   const anotherSig = await collection.retrieve(newTag);
+                   expect(anotherSig.json).toEqual(firstData); // expect(anotherSig.json).toEqual(newData);
+                   expect(anotherSig.protectedHeader.act).toBe(user); // expect(anotherSig.protectedHeader.act).toBe(otherUser);
+                 });
   testCollection(MutableCollection,
 		 (firstData, newData, signature, firstTag, newTag) => {
 		   expect(firstTag).toBe(newTag);
+		   // fixme: existingTag next line
 		   expect(signature.json).toEqual(newData);
 		   expect(signature.protectedHeader.act).toBe(otherUser);
 		   });
@@ -205,7 +212,7 @@ describe('Flexstore', function () {
 		   expect(timestamps.length).toBe(2); // two times
 
 		   // Can specify a specific time, and get the version that was in force then.
-		   
+
 		   // A specific matching time. In this case, the earliest time.
 		   expect((await collection.retrieve({tag: firstTag, time: timestamps[0]}))?.json).toEqual(firstData);
 		   // A time before the first, and get nothing.

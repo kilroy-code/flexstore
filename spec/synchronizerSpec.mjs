@@ -534,6 +534,13 @@ describe('Synchronizer', function () {
 
 	    describe('complex sync', function () {
 	      let author1, author2, owner, tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8, winningAuthor;
+	      // We have two collections that will be synchronized, aCol and bCol:
+	      // 1. We write some data to each: something unique to each (123 & xyx),
+	      //    and some data (abc) that to both, but by different authors.
+	      // 2. We set up to track things, and start synchronizing.
+	      // 3. While still maybe synchronizing, we write something unique to each collection (foo & bar)
+	      // 4. We wait for synchronization to complete and write something unique to each collection
+	      //    (red & white, while still connected).
 	      beforeAll(async function () {
 		let aCol = new kind({label: 'a-' + unique, name: 'complex'}),
 		    bCol = new kind({label: 'b-' + unique, name: 'complex'});
