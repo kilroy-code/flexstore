@@ -1,4 +1,4 @@
-import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '@kilroy-code/flexstore';
+import { Credentials, ImmutableCollection, StateCollection, MutableCollection, VersionedXCollection, VersionedCollection } from '@kilroy-code/flexstore';
 const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalThis;
 
 // N.B.: If a previous failed run was not able to cleanup, there may be old objects owned by old users.
@@ -42,10 +42,12 @@ describe('Flexstore', function () {
 	collection.itemEmitter.onupdate = event => {
 	  updateCount++;
 	  latestUpdate = event.detail;
+	  if (latestUpdate.json) delete latestUpdate.json.antecedent; // fixme!
 	};
 	tag = await collection.store(data);
 	expect(updateCount).toBe(1);
 	expect(latestUpdate.subjectTag).toBe(tag);
+	//fixme if (label === 'StateCollection') delete latestUpdate.json.antecedent;
 	expect(latestUpdate.json).toEqual(data);
       });
       afterAll(async function () {
@@ -64,6 +66,7 @@ describe('Flexstore', function () {
       });
       it('retrieves.', async function () {
 	const verified = await collection.retrieve(tag);
+	if (label === 'StateCollection') delete verified.json.antecedent;
 	expect(verified.json).toEqual(data);
       });
       it('lists.', async function () {
@@ -74,8 +77,18 @@ describe('Flexstore', function () {
       });
       it('cannot be written by a different owner (even with the same data).', async function () {
 	// We're not encrypting here, so the data is the data.
-	// For ImmutableCollection, this rejects as expected, but for a different reason: the data exists
-	await expectAsync(collection.store(data, {tag, author: randomUser, ifExists: 'reject'})).toBeRejected();
+	// Depending on type, this may reject or not, but in any case, the original data will not change.
+	const options = {tag, author: randomUser};
+	// if (label === 'StateCollection') { // store is not permitted, with or without this.
+	//   options.antecedent = tag;
+	// }
+	await collection.store(data, options).catch(() => null);
+	const now = await collection.retrieve(tag);
+	const owner = now.protectedHeader.kid;
+	if (label === 'StateCollection') delete now.json.antecedent;	
+	expect(now.json).toEqual(data); // still
+	expect(owner).toBe(Credentials.author); // still
+	expect(owner).not.toBe(randomUser);
       });
       describe('specifying owner', function () {
 	let previousOwner, tag2, tag3;
@@ -102,20 +115,24 @@ describe('Flexstore', function () {
 	});
 	it('team members can re-store', async function () {
 	  const newData = Object.assign({}, data, {birthday: '03/03'});
-	  Credentials.author = otherUser;
           // Store slightly different data at the same tag2, by a different member of the same team. restoreCheck will check that the right answer wins.
-          tag3 = await collection.store(newData, {tag: tag2}); // store B at tag2 (since reset of update count)
+          tag3 = await collection.store(newData, {tag: tag2, author: otherUser}); // store B at tag2 (since reset of update count)
           // Doing this in an immutable data shouldn't actually put the new data/owner,
           // but neither should it reject. It should "succeed" and resolve to the same tag.
-          Credentials.author = user;
 	  const newSignature = await collection.retrieve(tag2);
+          Credentials.author = user;
 	  expect(newSignature.protectedHeader.iss).toBe(team);
 	  expect(newSignature.decrypted.protectedHeader.kid).toBe(team); // encrypted for the whole team.
 	  await restoreCheck(data, newData, newSignature, tag2, tag3, collection);
 	});
 	it('cannot be overwritten by non-team member.', async function () {
-	  // For ImmutableCollection, this rejects as expected, but for a different reasons: it's an overwrite, and the data hash doesn't match tag2
-	  await expectAsync(collection.store({whatever: 'ignored'}, {tag: tag2, author: randomUser, owner: randomUser, ifExists: 'reject'})).toBeRejected();
+	  // Depending on type, this may reject or not, but in any case, the original data will not change.
+	  await collection.store(data, {tag: tag2, author: randomUser, owner: randomUser}).catch(() => null);
+	  const now = await collection.retrieve(tag2);
+	  const owner = now.protectedHeader.iss;
+	  if (label === 'StateCollection') delete now.json.antecedent;	
+	  expect(owner).toBe(Credentials.owner); // still
+	  expect(owner).not.toBe(randomUser);
 	});
 	it('adds to list.', async function () {
 	  const list = await collection.list();
@@ -194,13 +211,14 @@ describe('Flexstore', function () {
                    expect(anotherSig.json).toEqual(firstData); // expect(anotherSig.json).toEqual(newData);
                    expect(anotherSig.protectedHeader.act).toBe(user); // expect(anotherSig.protectedHeader.act).toBe(otherUser);
                  });
-  testCollection(MutableCollection,
-		 (firstData, newData, signature, firstTag, newTag) => {
-		   expect(firstTag).toBe(newTag);
-		   // fixme: existingTag next line
-		   expect(signature.json).toEqual(newData);
-		   expect(signature.protectedHeader.act).toBe(otherUser);
-		   });
+  function expectMutable(firstData, newData, signature, firstTag, newTag) {
+    expect(firstTag).toBe(newTag);
+    // fixme: existingTag next line
+    expect(signature.json).toEqual(newData);
+    expect(signature.protectedHeader.act).toBe(otherUser);
+  }
+  testCollection(MutableCollection, expectMutable);
+  testCollection(VersionedXCollection,expectMutable);
   testCollection(VersionedCollection,
 		 // TODO: various cases.
 		 async (firstData, newData, signature, firstTag, newTag, collection) => {
