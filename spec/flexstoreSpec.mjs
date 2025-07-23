@@ -111,6 +111,7 @@ describe('Flexstore', function () {
 	  expect(afterList.length).toBe(1);
 	  Credentials.owner = previousOwner;
 	  if (label === 'ImmutableCollection') updateCount++; // One of the stores was a no-op because it just left the first version lying there.
+	  if (label === 'VersionedXCollection') updateCount--; // One of the removes has had two states.
 	  expect(updateCount).toBe(4); // 2 successfull stores and 2 removes.
 	});
 	it('team members can re-store', async function () {
