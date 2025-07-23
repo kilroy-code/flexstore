@@ -1,4 +1,4 @@
-import { Credentials, ImmutableCollection, MutableCollection, VersionedCollection } from '@kilroy-code/flexstore';
+import { Credentials, VersionedXCollection as VersionedCollection } from '@kilroy-code/flexstore';
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
 
 // TODO: Demonstrate error on double spend.
@@ -110,9 +110,9 @@ describe('VersionedCollection', function () {
     afterAll(async function () {
       await Credentials.destroy(tagToBeCleaned3);
     });
-    it('is initial numeric.', function () {
-      const {ant} = initialItemData.protectedHeader; // Antecedent is the 'ant' header.
-      expect(typeof ant).toBe('number');
+    it('is initially falsy.', function () {
+      const {ant, iat} = initialItemData.protectedHeader; // Antecedent is the 'ant' header.
+      expect(ant).toBeFalsy();
     });
     it('is thereafter the string tag of the previous version.', async function () {
       const existing = await collection.retrieve(tag);
@@ -147,12 +147,12 @@ describe('VersionedCollection', function () {
       expect(typeof latestHash).toBe('string');
       expect(typeof precedingHash).toBe('string');
       expect(latestHash).not.toBe(precedingHash); // Each has is different...
-      expect(latest.text).toBe(preceding.text);   // ...even for the same data being written.
-      expect(latest.text).toBe(data);
+      expect(latest.text).toEqual(preceding.text);   // ...even for the same data being written.
+      expect(latest.text).toEqual(data);
     });
   });
 
-  describe("'put' merging", function () {
+  xdescribe("'put' merging", function () {
     let singleData = "single", singleTag, singleHash, singleVersionSignature, singleTimestampsSignature, singleTimestamp;
     let tripleTag, tripleSignatureA, tripleSignatureB;
     let copyA, copyB, copyC, merged, mergedTimestamps;

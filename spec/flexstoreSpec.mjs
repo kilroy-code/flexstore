@@ -42,12 +42,10 @@ describe('Flexstore', function () {
 	collection.itemEmitter.onupdate = event => {
 	  updateCount++;
 	  latestUpdate = event.detail;
-	  if (latestUpdate.json) delete latestUpdate.json.antecedent; // fixme!
 	};
 	tag = await collection.store(data);
 	expect(updateCount).toBe(1);
 	expect(latestUpdate.subjectTag).toBe(tag);
-	//fixme if (label === 'StateCollection') delete latestUpdate.json.antecedent;
 	expect(latestUpdate.json).toEqual(data);
       });
       afterAll(async function () {
@@ -66,7 +64,6 @@ describe('Flexstore', function () {
       });
       it('retrieves.', async function () {
 	const verified = await collection.retrieve(tag);
-	if (label === 'StateCollection') delete verified.json.antecedent;
 	expect(verified.json).toEqual(data);
       });
       it('lists.', async function () {
@@ -79,13 +76,9 @@ describe('Flexstore', function () {
 	// We're not encrypting here, so the data is the data.
 	// Depending on type, this may reject or not, but in any case, the original data will not change.
 	const options = {tag, author: randomUser};
-	// if (label === 'StateCollection') { // store is not permitted, with or without this.
-	//   options.antecedent = tag;
-	// }
 	await collection.store(data, options).catch(() => null);
 	const now = await collection.retrieve(tag);
 	const owner = now.protectedHeader.kid;
-	if (label === 'StateCollection') delete now.json.antecedent;	
 	expect(now.json).toEqual(data); // still
 	expect(owner).toBe(Credentials.author); // still
 	expect(owner).not.toBe(randomUser);
@@ -131,7 +124,6 @@ describe('Flexstore', function () {
 	  await collection.store(data, {tag: tag2, author: randomUser, owner: randomUser}).catch(() => null);
 	  const now = await collection.retrieve(tag2);
 	  const owner = now.protectedHeader.iss;
-	  if (label === 'StateCollection') delete now.json.antecedent;	
 	  expect(owner).toBe(Credentials.owner); // still
 	  expect(owner).not.toBe(randomUser);
 	});
@@ -219,7 +211,7 @@ describe('Flexstore', function () {
     expect(signature.protectedHeader.act).toBe(otherUser);
   }
   testCollection(MutableCollection, expectMutable);
-  testCollection(VersionedXCollection,expectMutable);
+  testCollection(VersionedXCollection, expectMutable);
   testCollection(VersionedCollection,
 		 // TODO: various cases.
 		 async (firstData, newData, signature, firstTag, newTag, collection) => {
