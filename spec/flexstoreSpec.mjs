@@ -1,4 +1,4 @@
-import { Credentials, ImmutableCollection, StateCollection, MutableCollection, VersionedXCollection, VersionedCollection } from '@kilroy-code/flexstore';
+import { Credentials, ImmutableCollection, StateCollection, MutableCollection, VersionedCollection } from '@kilroy-code/flexstore';
 const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalThis;
 
 // N.B.: If a previous failed run was not able to cleanup, there may be old objects owned by old users.
@@ -43,16 +43,16 @@ describe('Flexstore', function () {
 	  updateCount++;
 	  latestUpdate = event.detail;
 	};
-	tag = await collection.store(data);
+	tag = await collection.store(data); // author/owner is user/null
 	expect(updateCount).toBe(1);
-	expect(latestUpdate.subjectTag).toBe(tag);
+	expect(latestUpdate.protectedHeader.sub).toBe(tag);
 	expect(latestUpdate.json).toEqual(data);
       });
       afterAll(async function () {
 	updateCount = 0;
 	await collection.remove({tag});
 	expect(updateCount).toBe(1);
-	expect(latestUpdate.subjectTag).toBe(tag);
+	expect(latestUpdate.protectedHeader.sub).toBe(tag);
 	expect(latestUpdate.json).toBeFalsy();
 	const signature = await collection.retrieve(tag);
 	expect(signature?.json).toBeUndefined();
@@ -92,25 +92,36 @@ describe('Flexstore', function () {
 	  // Store data in whatever tag gets generated as "tag2". Owned by team.
 	  Credentials.owner = team;
 	  Credentials.encryption = 'team';
-	  tag2 = await collection.store(data); // store A at tag2 (since reset of updateCount)
+	  tag2 = await collection.store(data); // store B at tag2 (since reset of updateCount)
+	  expect(tag2).not.toBe(tag);
 	}, 10e3);
 	afterAll(async function () {
-	  Credentials.encryption = false;
-	  await collection.remove({tag: tag2});
-	  if (tag3) await collection.remove({tag: tag3});	 // May be a no-op.
-	  const afterList = await collection.list();
-	  expect((await collection.retrieve(tag2))?.json).toBeUndefined();
-	  if (tag3) expect((await collection.retrieve(tag3))?.json).toBeUndefined();
-	  expect(afterList.length).toBe(1);
-	  Credentials.owner = previousOwner;
-	  if (label === 'ImmutableCollection') updateCount++; // One of the stores was a no-op because it just left the first version lying there.
-	  if (label === 'VersionedXCollection') updateCount--; // One of the removes has had two states.
-	  expect(updateCount).toBe(4); // 2 successfull stores and 2 removes.
+	  try {
+	    await collection.remove({tag: tag2});
+	    await collection.remove({tag: tag3, author: otherUser});	 // May be a no-op.
+	    expect((await collection.retrieve(tag2))?.json).toBeUndefined();
+	    expect((await collection.retrieve(tag3))?.json).toBeUndefined();
+	    expect((await collection.list()).length).toBe(1);
+	  } finally {
+	    Credentials.owner = previousOwner;
+	    Credentials.encryption = null;
+	  }
+	  switch (label) { // We have tried 2 stores and 2 removes, but on the same tag.
+	  case 'ImmutableCollection': // The second store and second remove on the same tag are no-ops.
+	    expect(updateCount).toBe(2);
+	    break;
+	  case 'MutableCollection': // The second remove on the same tag is a no-op.
+	    expect(updateCount).toBe(3);
+	    break;
+	  case 'VersionedXCollection': // Both stores take. The first delete removes two versions, and the second is a no-op.
+	    expect(updateCount).toBe(4);
+	    break;
+	  }
 	});
 	it('team members can re-store', async function () {
 	  const newData = Object.assign({}, data, {birthday: '03/03'});
           // Store slightly different data at the same tag2, by a different member of the same team. restoreCheck will check that the right answer wins.
-          tag3 = await collection.store(newData, {tag: tag2, author: otherUser}); // store B at tag2 (since reset of update count)
+          tag3 = await collection.store(newData, {tag: tag2, author: otherUser}); // store B2 at tag2 (since reset of update count)
           // Doing this in an immutable data shouldn't actually put the new data/owner,
           // but neither should it reject. It should "succeed" and resolve to the same tag.
 	  const newSignature = await collection.retrieve(tag2);
@@ -120,7 +131,6 @@ describe('Flexstore', function () {
 	  await restoreCheck(data, newData, newSignature, tag2, tag3, collection);
 	});
 	it('cannot be overwritten by non-team member.', async function () {
-	  // Depending on type, this may reject or not, but in any case, the original data will not change.
 	  await collection.store(data, {tag: tag2, author: randomUser, owner: randomUser}).catch(() => null);
 	  const now = await collection.retrieve(tag2);
 	  const owner = now.protectedHeader.iss;
@@ -203,34 +213,12 @@ describe('Flexstore', function () {
                    const anotherSig = await collection.retrieve(newTag);
                    expect(anotherSig.json).toEqual(firstData); // expect(anotherSig.json).toEqual(newData);
                    expect(anotherSig.protectedHeader.act).toBe(user); // expect(anotherSig.protectedHeader.act).toBe(otherUser);
-                 });
+                   });
   function expectMutable(firstData, newData, signature, firstTag, newTag) {
     expect(firstTag).toBe(newTag);
-    // fixme: existingTag next line
     expect(signature.json).toEqual(newData);
     expect(signature.protectedHeader.act).toBe(otherUser);
   }
   testCollection(MutableCollection, expectMutable);
-  testCollection(VersionedXCollection, expectMutable);
-  testCollection(VersionedCollection,
-		 // TODO: various cases.
-		 async (firstData, newData, signature, firstTag, newTag, collection) => {
-		   expect(firstTag).toBe(newTag);
-		   expect(signature.json).toEqual(newData);
-		   expect(signature.protectedHeader.act).toBe(otherUser);
-
-		   const timestamps = await collection.retrieveTimestamps(firstTag);
-		   expect(timestamps.length).toBe(2); // two times
-
-		   // Can specify a specific time, and get the version that was in force then.
-
-		   // A specific matching time. In this case, the earliest time.
-		   expect((await collection.retrieve({tag: firstTag, time: timestamps[0]}))?.json).toEqual(firstData);
-		   // A time before the first, and get nothing.
-		   expect((await collection.retrieve({tag: firstTag, time: timestamps[0] - 1}))?.json).toBeUndefined();
-		   // A time in between entries, and get the largest one that is before what is specifed.
-		   expect((await collection.retrieve({tag: firstTag, time: timestamps[0] + 1}))?.json).toEqual(firstData);		   
-		   // A time after the last and get the same as the last.
-		   expect((await collection.retrieve({tag: firstTag, time: timestamps[1] + 1}))?.json).toEqual(newData);
-		 });
+  testCollection(VersionedCollection, expectMutable);
 });
