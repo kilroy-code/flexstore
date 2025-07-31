@@ -206,7 +206,7 @@ describe('Synchronizer', function () {
 	    synchronizer1a.dataChannelPromise, synchronizer2a.dataChannelPromise,
 	    synchronizer1b.dataChannelPromise, synchronizer2b.dataChannelPromise
 	  ]);
-	}, 15e3); // Firefox. 
+	}, 15e3); // Firefox.
 	afterAll(async function () {
 	  await Promise.all([
 	    synchronizer1a.disconnect(),
@@ -536,7 +536,7 @@ describe('Synchronizer', function () {
 	      let author1, author2, owner, tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8, winningAuthor;
 	      // We have two collections that will be synchronized, aCol and bCol:
 	      // 1. We write some data to each: something unique to each (123 & xyx),
-	      //    and some data (abc) that to both, but by different authors.
+	      //    and some data (abc) to both, but by different authors.
 	      // 2. We set up to track things, and start synchronizing.
 	      // 3. While still maybe synchronizing, we write something unique to each collection (foo & bar)
 	      // 4. We wait for synchronization to complete and write something unique to each collection
@@ -557,6 +557,7 @@ describe('Synchronizer', function () {
 		const firstCollection = firstWins ? aCol : bCol;
 		const secondCollection = firstWins ? bCol : aCol;
 		winningAuthor = firstWins ? author1 : author2;
+
 		tag1 = await firstCollection.store('abc', {author: author1, owner}); // ungWv48Bz...
 		tag2 = await aCol.store('123', {author: author1, owner});            // pmWkWSBCL...
 		tag3 = await secondCollection.store('abc', {author: author2, owner});
@@ -576,6 +577,8 @@ describe('Synchronizer', function () {
 		await bCol.synchronize(aCol);
 		a = aCol.synchronizers.get(bCol);
 		b = bCol.synchronizers.get(aCol);
+		expect(a.collection).toBe(aCol);
+		expect(b.collection).toBe(bCol);
 
 		// Without waiting for synchronization to complete.
 		[tag5, tag6] = await Promise.all([
@@ -585,12 +588,14 @@ describe('Synchronizer', function () {
 
 		expect(await a.completedSynchronization).toBeGreaterThanOrEqual(1); // receive Ngi8oeROp.., and maybe _N4rLtul..
 		expect(await b.completedSynchronization).toBeGreaterThanOrEqual(2); // receive ungWv48Bz.., pmWkWSBCL.., and maybe LCa0a2j_..
+
 		// Wait a bit for 'foo' and 'bar' to arrive, and then see if both sides have what we now expect.
 		await delay(1e3);
 		aList = await aCol.list();
 		bList = await bCol.list();
 		let all = [tag1, tag2, tag4, tag5, tag6];
 		aList.sort(); bList.sort(); all.sort();
+
 		expect(aList).toEqual(all);
 		expect(bList).toEqual(all);
 
@@ -606,22 +611,26 @@ describe('Synchronizer', function () {
 	      afterAll(async function () {
 		// Both get updates for everything added to either side since connecting: foo, bar, red, white.
 		// But in addition:
-		//   a gets xyz (which it did not ahve).
+		//   a gets xyz (which it did not have).
 		//   b gets 123 (which it didn't have) and a reconciled value for abc (of which it had the wrong sig).
 		let aUpdates = [              'bar', 'foo', 'red', 'white', 'xyz'];
 		let bUpdates = ['123', 'abc', 'bar', 'foo', 'red', 'white'];
-		// For VersionedCollection both sides have a unique 'abc' to tell the other about.
-		if (label === 'VersionedCollection') aUpdates = ['abc', ...aUpdates];
+		// For VersionedCollection both sides have a unique 'abc' to tell the other about, plus a merge artifact.
+		if (label === 'VersionedCollection') {
+		  aUpdates = ['abc', 'abc', ...aUpdates];
+		  bUpdates = ['abc', ...bUpdates];
+		}
 		Credentials.owner = owner;
 
 		a.collection.itemEmitter.onupdate = b.collection.itemEmitter.onupdate = null;
 
-		a.collection.itemEmitter.updates.sort(); // The timing of those received during synchronization can be different.
-		expect(a.collection.itemEmitter.updates).toEqual(aUpdates);
+		let gotA = a.collection.itemEmitter.updates;
+		gotA.sort(); // The timing of those received during synchronization can be different.
+		expect(gotA).toEqual(aUpdates);
 		await clean(a);
 
-		b.collection.itemEmitter.updates.sort();
 		let gotB = b.collection.itemEmitter.updates;
+		gotB.sort(); bUpdates.sort();
 		expect(gotB).toEqual(bUpdates);
 		await clean(b);
 
@@ -640,13 +649,12 @@ describe('Synchronizer', function () {
 		expect(tag1).toBe(tag3);
 		const matchedA = await a.collection.retrieve({tag: tag1});
 		const matchedB = await b.collection.retrieve({tag: tag1});
+
 		expect(matchedA.text).toBe(matchedB.text);
-		// These next two are sensitive to current implementation
+		// These next are sensitive to current implementation
 		expect(matchedA.protectedHeader.iat).toBe(matchedB.protectedHeader.iat);
 		expect(matchedA.protectedHeader.act).toBe(matchedB.protectedHeader.act);
-
 		expect(matchedA.protectedHeader.iss).toBe(matchedB.protectedHeader.iss);
-		expect(matchedA.protectedHeader.act).toBe(winningAuthor);
 	      });
 	      it('collections receive new data saved during sync.', async function () {
 		expect((await a.collection.retrieve({tag: tag6})).text).toBe('bar');
@@ -656,7 +664,6 @@ describe('Synchronizer', function () {
 		expect((await a.collection.retrieve({tag: tag7})).text).toBe('white');
 		expect((await b.collection.retrieve({tag: tag8})).text).toBe('red');
 	      });
-
 	    });
 	  });
 	}

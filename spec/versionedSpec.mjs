@@ -539,10 +539,11 @@ describe('VersionedCollection', function () {
 	await copyVersions(copyB, nonMemberHolding);
 	await copyVersions(copyC, nonMemberHolding);
 	// Just for fun, let's put the second one first.
-	//fixme restore await nonMemberHolding.put(singleTag, await copyB.get(singleTag), true, other);
+	await nonMemberHolding.put(singleTag, await copyB.get(singleTag), true, other);
 	await nonMemberHolding.put(singleTag, await copyA.get(singleTag), true, other);
-	await nonMemberHolding.put(singleTag, await copyB.get(singleTag), true, other); // fixme remove
 	await nonMemberHolding.put(singleTag, await copyC.get(singleTag), true, other);
+
+	// TODO: take this through another level of indirection, showing that we can merge from non-member to non-member.
 
 	// The nonMemberHolding result is in limbo. It does not have one single merged set of timestamps.
 	// But we can confirm that it has not been anonymously merged:
