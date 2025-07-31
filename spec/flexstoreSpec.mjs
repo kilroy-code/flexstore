@@ -45,14 +45,14 @@ describe('Flexstore', function () {
 	};
 	tag = await collection.store(data); // author/owner is user/null
 	expect(updateCount).toBe(1);
-	expect(latestUpdate.protectedHeader.sub).toBe(tag);
+	if (label !== 'StateCollection') expect(latestUpdate.protectedHeader.sub).toBe(tag);
 	expect(latestUpdate.json).toEqual(data);
       });
       afterAll(async function () {
 	updateCount = 0;
 	await collection.remove({tag});
 	expect(updateCount).toBe(1);
-	expect(latestUpdate.protectedHeader.sub).toBe(tag);
+	if (label !== 'StateCollection') expect(latestUpdate.protectedHeader.sub).toBe(tag);
 	expect(latestUpdate.json).toBeFalsy();
 	const signature = await collection.retrieve(tag);
 	expect(signature?.json).toBeUndefined();
@@ -84,16 +84,22 @@ describe('Flexstore', function () {
 	expect(owner).not.toBe(randomUser);
       });
       describe('specifying owner', function () {
-	let previousOwner, tag2, tag3;
+	let previousOwner, tag2, tag3, options;
 	const data = {name: 'Bob', birthday: '02/02'};
 	beforeAll(async function () {
-	  updateCount = 0;
 	  previousOwner = Credentials.owner;
 	  // Store data in whatever tag gets generated as "tag2". Owned by team.
 	  Credentials.owner = team;
 	  Credentials.encryption = 'team';
+	  updateCount = 0;
 	  tag2 = await collection.store(data); // store B at tag2 (since reset of updateCount)
 	  expect(tag2).not.toBe(tag);
+	  if (label === 'StateCollection') {
+	    // The way the internal machinery writes to the "same" StatCollection tag is a bit different
+	    options = {ant: tag2};
+	  } else {
+	    options = {tag: tag2};
+	  }
 	}, 10e3);
 	afterAll(async function () {
 	  try {
@@ -113,25 +119,28 @@ describe('Flexstore', function () {
 	  case 'MutableCollection': // The second remove on the same tag is a no-op.
 	    expect(updateCount).toBe(3);
 	    break;
-	  case 'VersionedXCollection': // Both stores take. The first delete removes two versions, and the second is a no-op.
+	  case 'VersionedCollection': // Both stores take. The first delete removes two versions, and the second is a no-op.
+	  case 'StateCollection':
 	    expect(updateCount).toBe(4);
 	    break;
+	  default:
+	    expect("Missing afterAll case").toBeFalsy();
 	  }
 	});
 	it('team members can re-store', async function () {
 	  const newData = Object.assign({}, data, {birthday: '03/03'});
           // Store slightly different data at the same tag2, by a different member of the same team. restoreCheck will check that the right answer wins.
-          tag3 = await collection.store(newData, {tag: tag2, author: otherUser}); // store B2 at tag2 (since reset of update count)
+	  tag3 = await collection.store(newData, {author: otherUser, ...options}); // store B2 at tag2 (since reset of update count)
           // Doing this in an immutable data shouldn't actually put the new data/owner,
           // but neither should it reject. It should "succeed" and resolve to the same tag.
-	  const newSignature = await collection.retrieve(tag2);
+	  const verified = await collection.retrieve(tag3);
           Credentials.author = user;
-	  expect(newSignature.protectedHeader.iss).toBe(team);
-	  expect(newSignature.decrypted.protectedHeader.kid).toBe(team); // encrypted for the whole team.
-	  await restoreCheck(data, newData, newSignature, tag2, tag3, collection);
+	  expect(verified.protectedHeader.iss).toBe(team);
+	  expect(verified.decrypted.protectedHeader.kid).toBe(team); // encrypted for the whole team.
+	  await restoreCheck(data, newData, verified, tag2, tag3, collection);
 	});
 	it('cannot be overwritten by non-team member.', async function () {
-	  await collection.store(data, {tag: tag2, author: randomUser, owner: randomUser}).catch(() => null);
+	  await collection.store(data, {author: randomUser, owner: randomUser, ...options}).catch(() => null);
 	  const now = await collection.retrieve(tag2);
 	  const owner = now.protectedHeader.iss;
 	  expect(owner).toBe(Credentials.owner); // still
@@ -200,25 +209,27 @@ describe('Flexstore', function () {
       });
     });
   }
-  testCollection(ImmutableCollection,
-		 // TODO: store stamped earlier than existing should work.
-		 // TODO: delete after written whould work.
-		 // TODO: store after delete should work.
-		 // TODO: delete stamped earlier than existing should fail(?)
-                 async (firstData, newData, signature, firstTag, newTag, collection) => {
-                   expect(firstTag).toBe(newTag); // expect(firstTag).not.toBe(newTag);
-                   expect(signature.json).toEqual(firstData);
-                   expect(signature.protectedHeader.act).toBe(user);
-
-                   const anotherSig = await collection.retrieve(newTag);
-                   expect(anotherSig.json).toEqual(firstData); // expect(anotherSig.json).toEqual(newData);
-                   expect(anotherSig.protectedHeader.act).toBe(user); // expect(anotherSig.protectedHeader.act).toBe(otherUser);
-                   });
-  function expectMutable(firstData, newData, signature, firstTag, newTag) {
+  // TODO: store stamped earlier than existing should work.
+  // TODO: delete after written whould work.
+  // TODO: store after delete should work.
+  // TODO: delete stamped earlier than existing should fail(?)
+  async function expectImmutable(firstData, newData, newVerified, firstTag, newTag) {
     expect(firstTag).toBe(newTag);
-    expect(signature.json).toEqual(newData);
-    expect(signature.protectedHeader.act).toBe(otherUser);
+    expect(newVerified.json).toEqual(firstData);
+    expect(newVerified.protectedHeader.act).toBe(user); // Original user
   }
+  function expectMutable(firstData, newData, newVerified, firstTag, newTag) {
+    expect(firstTag).toBe(newTag);
+    expect(newVerified.json).toEqual(newData);
+    expect(newVerified.protectedHeader.act).toBe(otherUser);
+  }
+  async function expectState(firstData, newData, newVerified, firstTag, newTag) {
+    expect(firstTag).not.toBe(newTag);
+    expect(newVerified.json).toEqual(newData);
+    expect(newVerified.protectedHeader.act).toBe(otherUser);
+  }
+  testCollection(StateCollection, expectState);
+  testCollection(ImmutableCollection, expectImmutable);
   testCollection(MutableCollection, expectMutable);
   testCollection(VersionedCollection, expectMutable);
 });

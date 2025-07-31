@@ -1,9 +1,9 @@
 import uuid4 from 'uuid4';
-import { SharedWebRTC, Synchronizer, Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection, storageVersion } from '@kilroy-code/flexstore';
+import { SharedWebRTC, Synchronizer, Credentials, Collection, ImmutableCollection, MutableCollection, StateCollection, VersionedCollection, storageVersion } from '@kilroy-code/flexstore';
 
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
 
-Object.assign(globalThis, {Credentials, Collection, ImmutableCollection, MutableCollection, VersionedCollection, SharedWebRTC}); // for debugging
+Object.assign(globalThis, {Credentials, Collection, ImmutableCollection, MutableCollection, StateCollection, VersionedCollection, SharedWebRTC}); // for debugging
 const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 
 const CONNECT_TIME = 20e3;
@@ -532,6 +532,7 @@ describe('Synchronizer', function () {
 	      }, CONNECT_TIME);
 	    });
 
+	    if (label == 'StateCollection') return; // complex sync test isn't designed for state identity semantics
 	    describe('complex sync', function () {
 	      let author1, author2, owner, tag1, tag2, tag3, tag4, tag5, tag6, tag7, tag8, winningAuthor;
 	      // We have two collections that will be synchronized, aCol and bCol:
@@ -667,6 +668,7 @@ describe('Synchronizer', function () {
 	    });
 	  });
 	}
+	testCollection(StateCollection);
 	testCollection(ImmutableCollection);
 	testCollection(MutableCollection);
 	testCollection(VersionedCollection);
