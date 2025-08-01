@@ -547,7 +547,8 @@ describe('Synchronizer', function () {
 		    bCol = new kind({label: 'b-' + unique, name: 'complex'});
 
 		author1 = Credentials.author;
-		author2 = await Credentials.createAuthor('foo');
+		//author2 = await Credentials.createAuthor('foo');
+		author2 = await Credentials.create();
 		owner = await Credentials.create(author1, author2);
 
 		const firstWins = label === 'ImmutableCollection';

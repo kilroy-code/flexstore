@@ -244,6 +244,7 @@ describe("Credentials", function () {
   }, 10e3);
   afterAll(async function () {
     await Credentials.destroy({tag: team, recursiveMembers: true});
+    await Credentials.destroy({tag: alt, recursiveMembers: true});    
   });
   it("works after clear.", async function () {
     await Credentials.clear();
