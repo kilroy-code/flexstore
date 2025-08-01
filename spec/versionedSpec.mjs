@@ -545,8 +545,6 @@ describe('VersionedCollection', function () {
 	await nonMemberHolding.put(singleTag, await copyA.get(singleTag), true);
 	await nonMemberHolding.put(singleTag, await copyC.get(singleTag), true);
 
-	// TODO: take this through another level of indirection, showing that we can merge from non-member to non-member.
-
 	// The nonMemberHolding result is in limbo. It does not have one single merged set of timestamps.
 	// But we can confirm that it has not been anonymously merged:
 	const stateVerification = await nonMemberHolding.getVerified(singleTag);
