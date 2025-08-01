@@ -534,13 +534,23 @@ describe('VersionedCollection', function () {
 	// Just like in the signed merged, except that we now explicitly use a non-member's credentials,
 	// as would be the case on a relay server.
 	// Internally, the signature is in two separate, individually signed parts.
+	const before = await copyA.getVerified(singleTag);
+	function short(v) { return {tag: v.tag, json: v.json, header: v.protectedHeader}; }
+	console.log({author, other, cred:Credentials.author, before: short(before)});
+	console.log('can sign author through copyA', !!(await copyA.sign('123', {tags: [author]}).catch(console.error)));
+	console.log('can sign other through copyA', !!(await copyA.sign('123', {tags: [other]}).catch(console.error)));
+
 	const nonMemberHolding = new VersionedCollection({name: 'nonMemberHolding'});
+	nonMemberHolding.restrictedTags = new Set([other]);
 	await copyVersions(copyA, nonMemberHolding);
 	await copyVersions(copyB, nonMemberHolding);
 	await copyVersions(copyC, nonMemberHolding);
 	// Just for fun, let's put the second one first.
+	console.log('put copyB');
 	await nonMemberHolding.put(singleTag, await copyB.get(singleTag), true, other);
+	console.log('put copyA');	
 	await nonMemberHolding.put(singleTag, await copyA.get(singleTag), true, other);
+	console.log('put copyC');
 	await nonMemberHolding.put(singleTag, await copyC.get(singleTag), true, other);
 
 	// TODO: take this through another level of indirection, showing that we can merge from non-member to non-member.
@@ -549,15 +559,27 @@ describe('VersionedCollection', function () {
 	// But we can confirm that it has not been anonymously merged:
 	const stateVerification = await nonMemberHolding.getVerified(singleTag);
 	const states = stateVerification.json;
-	//expect(stateVerification.protectedHeader.group).toBe(author);
+	console.log('from holding', short(stateVerification));
+	console.log('can sign author through copyA', !!(await copyA.sign('123', {tags: [author]}).catch(console.error)));
+	console.log('can sign other through copyA', !!(await copyA.sign('123', {tags: [other]}).catch(console.error)));
+	console.log('can sign author through holding', !!(await nonMemberHolding.sign('123', {tags: [author]}).catch(console.error)));
+	console.log('can sign other through holding', !!(await nonMemberHolding.sign('123', {tags: [other]}).catch(console.error)));
+	expect(stateVerification.protectedHeader.group).toBe(author);
 	expect(states.length).toBe(3); // nonmember merge of a, b, and c.
-	// And we can get it to combine states for us without persisting.
-	// expect(await nonMemberHolding.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);
-	// expect((await nonMemberHolding.retrieve(singleTag)).text).toBe('copyC');
 
 	// And we can merge it properly with authorization.
 	Credentials.author = author;
+	delete nonMemberHolding.restrictedTags;
+	console.log('restrictions lifted', nonMemberHolding.restrictedTags);
+	console.log('can sign author through copyA', !!(await copyA.sign('123', {tags: [author]}).catch(console.error)));
+	console.log('can sign other through copyA', !!(await copyA.sign('123', {tags: [other]}).catch(console.error)));
+	console.log('can sign author through holding', !!(await nonMemberHolding.sign('123', {tags: [author]}).catch(console.error)));
+	console.log('can sign other through holding', !!(await nonMemberHolding.sign('123', {tags: [other]}).catch(console.error)));
+
+	console.log('jiggle');
+	if (Credentials.author !== author) console.log('\n\n*** WTF', {author, cred:Credentials.author});
 	await nonMemberHolding.put(singleTag, stateVerification.signature, true); // The owner jiggles the handle.
+	if (Credentials.author !== author) console.log('\n\n*** WTF', {author, cred:Credentials.author});	
 	const restatedVerification = await nonMemberHolding.getVerified(singleTag);
 	expect(restatedVerification.json.length).toBe(1);
 	expect(await nonMemberHolding.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);

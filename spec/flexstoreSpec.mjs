@@ -233,3 +233,29 @@ describe('Flexstore', function () {
   testCollection(MutableCollection, expectMutable);
   testCollection(VersionedCollection, expectMutable);
 });
+
+describe("Credentials", function () {
+  let team, alt, teamDevice, altDevice;
+  beforeAll(async function () {
+    teamDevice = await Credentials.create();
+    team = await Credentials.create(teamDevice);
+    altDevice = await Credentials.create();
+    alt = await Credentials.create(altDevice);
+  }, 10e3);
+  afterAll(async function () {
+    await Credentials.destroy({tag: team, recursiveMembers: true});
+  });
+  it("works after clear.", async function () {
+    await Credentials.clear();
+    expect(await Credentials.sign('something', {team})).toBeTruthy();
+  });
+  describe("restricted", function () {
+    let collection;
+    beforeAll(async function () {
+      collection = new MutableCollection({restrictedTags: new Set([alt, altDevice])});
+    });
+    it("forbids use of unenumerated tags.", async function () {
+      expect(await collection.sign('something', {team: team}).catch(() => false)).toBeFalsy();
+    });
+  });
+});
