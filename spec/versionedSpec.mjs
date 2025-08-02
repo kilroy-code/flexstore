@@ -152,7 +152,7 @@ describe('VersionedCollection', function () {
     });
   });
 
-  describe("commonStateAndMessages", function() { // This internal method is important to correct system behavior.
+  describe("commonState", function() { // This internal method is important to correct system behavior.
     let collection, oldAuthor;
     beforeAll(async function () {
       oldAuthor = Credentials.author;
@@ -170,7 +170,7 @@ describe('VersionedCollection', function () {
       const [expectedState, ...expectedMessages] = expected;
       expectedMessages.sort();
 
-      const [state, ...verifications] = await collection.commonStateAndMessages(states, id);
+      const [state, ...verifications] = await collection.commonState(states, id);
       let messages = verifications.map(verification => verification.json.message).filter(Boolean);
       messages.sort();
       expect(state).toBe(expectedState);
@@ -318,7 +318,7 @@ describe('VersionedCollection', function () {
 	const node2 = await collection.store({message: "intermediate-msg"}, {ant: root2});
 	const chain2 = await collection.store({message: "chain2-msg"}, {ant: node2});
 
-	const result = await collection.commonStateAndMessages([chain1, chain2]);
+	const result = await collection.commonState([chain1, chain2]);
 	expect(result).toEqual([]);
       });
 
@@ -371,7 +371,7 @@ describe('VersionedCollection', function () {
       it("should minimize antecedentState accesses for deep states", async function() {
 	// Test with states at various depths, common ancestor is near root
 	StateTrackingAccess.accesses = 0;
-	const [result] = await collection.commonStateAndMessages([deepStates[50], deepStates[99]]);
+	const [result] = await collection.commonState([deepStates[50], deepStates[99]]);
 
 	expect(result).toBe(deepStates[99]);
 	expect(StateTrackingAccess.accesses).toBeLessThanOrEqual(50); // Should be much less than 50 + 99 = 149 full traversals
@@ -380,7 +380,7 @@ describe('VersionedCollection', function () {
       it("should be efficient when common ancestor is near the surface", async function() {
 	// Test with states at depth 50 and 99 - common ancestor at depth 50
 	StateTrackingAccess.accesses = 0;
-	const [result] = await collection.commonStateAndMessages([deepStates[10], deepStates[50], deepStates[99]]);
+	const [result] = await collection.commonState([deepStates[10], deepStates[50], deepStates[99]]);
 
 	expect(result).toBe(deepStates[99]);
 	expect(StateTrackingAccess.accesses).toBeLessThan(150);
