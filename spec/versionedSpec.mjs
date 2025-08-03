@@ -549,7 +549,7 @@ describe('VersionedCollection', function () {
 	// But we can confirm that it has not been anonymously merged:
 	const stateVerification = await nonMemberHolding.getVerified(singleTag);
 	const states = stateVerification.json;
-	expect(stateVerification.protectedHeader.group).toBe(author);
+	expect(nonMemberHolding.getOwner(stateVerification.protectedHeader)).toBe(author);
 	expect(states.length).toBe(3); // nonmember merge of a, b, and c.
 
 	// And we can merge it properly with authorization.
