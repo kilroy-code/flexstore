@@ -40,7 +40,7 @@ describe('VersionedCollection', function () {
       }
       versions = await collection.getVersions(tag);
       //const contents = await Promise.all(Object.values(versions).map(hash => collection.versions.retrieve(hash)));
-    });
+    }, 10e3);
     afterAll(async function () {
       await Credentials.destroy(tagToBeCleaned2);
     });
@@ -392,17 +392,17 @@ describe('VersionedCollection', function () {
     let singleData = "single", singleTag, singleHash, singleVersionSignature, singleTimestampsSignature, singleTimestamp;
     let tripleTag, tripleSignatureA, tripleSignatureB;
     let copyA, copyB, copyC, merged, mergedTimestamps;
-    let author, other;
+    let author, other, member, restricted;
 
     // TODO: confirm that this preserves encryption
 
     // Make a new collection, and copy the "single" data (state and current hash marker) over to the new copy.
     // Then store something in the copy so that singleTag locally has a version with name
-    async function copyAndAddOne(name, author, owner) {
+    async function copyAndAddOne(name, signingOptions) {
       const copy = new VersionedCollection({name});
       await copy.versions.put(singleHash, singleVersionSignature);
       await copy.put(singleTag, singleTimestampsSignature, true);
-      await copy.store(name, {author, owner, tag: singleTag});
+      await copy.store(name, {tag: singleTag, ...signingOptions});
       return copy;
     }
 
@@ -417,11 +417,17 @@ describe('VersionedCollection', function () {
     }
 
     beforeAll(async function () {
-      author = Credentials.author = await Credentials.create();
-      let owner = author;
+      // In these tests:
+      // - author is always the original author of the material.
+      // - owner is the original owner of the material, of which author is idential (FIXME or a member).
+      // - other is someone else that the material passes through, who neither owner nor a member of owner.
+      member = await Credentials.create();
+      let owner = author = Credentials.author = await Credentials.create();
+      let constructionOptions = {author, owner};
       other = await Credentials.create(); // Not owner.
+      restricted = new Set([other]);
 
-      singleTag = await collection.store(singleData, {author, owner});    // The toplevel tag at which we stored "single" in collection.
+      singleTag = await collection.store(singleData, constructionOptions);    // The toplevel tag at which we stored "single" in collection.
       const singleVersions = await collection.getVersions(singleTag);     // Originally just one version.
       singleTimestamp = singleVersions.latest;                            // At this timestamp.
       singleHash = singleVersions[singleTimestamp];                       // Internally stored in collection.versions at this hash.
@@ -430,17 +436,17 @@ describe('VersionedCollection', function () {
 
       // Like single, but beginning with three stores, of value 1, 2, and 3.
       let counter = 1;
-      tripleTag = await collection.store(counter, {author, owner});
-      await collection.store(++counter, {author, owner, tag: tripleTag});
+      tripleTag = await collection.store(counter, constructionOptions);
+      await collection.store(++counter, {tag: tripleTag, ...constructionOptions});
       tripleSignatureA = await collection.get(tripleTag);
-      await collection.store(++counter, {author, owner, tag: tripleTag});
+      await collection.store(++counter, {tag: tripleTag, ...constructionOptions});
       tripleSignatureB = await collection.get(tripleTag);
 
       // Each copy begins with the same single entry, and then stores another version at singleTag, with the given name.
       // Each copy thus has two versions at singleTag, where the second version is a different value and timestamp for each copy.
-      copyA = await copyAndAddOne('copyA', author, owner);
-      copyB = await copyAndAddOne('copyB', author, owner);
-      copyC = await copyAndAddOne('copyC', author, owner);
+      copyA = await copyAndAddOne('copyA', constructionOptions);
+      copyB = await copyAndAddOne('copyB', constructionOptions);
+      copyC = await copyAndAddOne('copyC', constructionOptions);
 
       // Now merge all three into a new empty copy called 'merged'.
       merged = new VersionedCollection({name: 'merged'});
@@ -536,7 +542,7 @@ describe('VersionedCollection', function () {
 	// Internally, the signature is in two separate, individually signed parts.
 
 	const nonMemberHolding = new VersionedCollection({name: 'nonMemberHolding'});
-	nonMemberHolding.restrictedTags = new Set([other]);
+	nonMemberHolding.restrictedTags = restricted;
 	await copyVersions(copyA, nonMemberHolding);
 	await copyVersions(copyB, nonMemberHolding);
 	await copyVersions(copyC, nonMemberHolding);

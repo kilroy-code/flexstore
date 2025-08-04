@@ -1,5 +1,5 @@
 import { Credentials, ImmutableCollection, StateCollection, MutableCollection, VersionedCollection } from '@kilroy-code/flexstore';
-const { describe, beforeAll, afterAll, it, expect, expectAsync, URL } = globalThis;
+const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
 
 // N.B.: If a previous failed run was not able to cleanup, there may be old objects owned by old users.
 // So you need to clear things wherever they are stored: locally, hosted, browser cache, ....
@@ -235,16 +235,81 @@ describe('Flexstore', function () {
 });
 
 describe("Credentials", function () {
-  let team, alt, teamDevice, altDevice;
+  let team, alt, teamDevice, altDevice, immutable, oldAuthor, oldOwner;
   beforeAll(async function () {
+    oldAuthor = Credentials.author;
+    oldOwner = Credentials.owner;
     teamDevice = await Credentials.create();
     team = await Credentials.create(teamDevice);
     altDevice = await Credentials.create();
     alt = await Credentials.create(altDevice);
+    immutable = new ImmutableCollection({name: 'credential-test'});
   }, 10e3);
+  afterEach(function () {
+    Credentials.author = oldAuthor;
+    Credentials.owner = oldOwner;
+  });
   afterAll(async function () {
     await Credentials.destroy({tag: team, recursiveMembers: true});
-    await Credentials.destroy({tag: alt, recursiveMembers: true});    
+    await Credentials.destroy({tag: alt, recursiveMembers: true});
+  });
+  describe('specifying author', function () {
+    it("signs with Credentials.author.", async function () {
+      Credentials.author = teamDevice;
+      Credentials.owner = '';
+      const signature = await immutable.sign("foo");
+      const verified = await immutable.verify(signature);
+      const {kid, act, iss} = verified.protectedHeader;
+      expect(kid).toBe(teamDevice);
+      expect(act).toBeFalsy();
+      expect(iss).toBeFalsy();
+    });
+    it("signs with author option.", async function () {
+      const signature = await immutable.sign("foo", {author: teamDevice, owner: ''});
+      const verified = await immutable.verify(signature);
+      const {kid, act, iss} = verified.protectedHeader;
+      expect(kid).toBe(teamDevice);
+      expect(act).toBeFalsy();
+      expect(iss).toBeFalsy();
+    });
+    it("signs with member option.", async function () {
+      const signature = await immutable.sign("foo", {member: teamDevice, team: ''});
+      const verified = await immutable.verify(signature);
+      const {kid, act, iss} = verified.protectedHeader;
+      expect(kid).toBe(teamDevice);
+      expect(act).toBeFalsy();
+      expect(iss).toBeFalsy();
+    });
+  });
+  describe('specifying owner', function () {
+    beforeEach(function () {
+      Credentials.owner = Credentials.author = '';
+    });
+    it("signs with Credentials.owner.", async function () {
+      Credentials.owner = team;
+      const signature = await immutable.sign("foo");
+      const verified = await immutable.verify(signature);
+      const {kid, act, iss} = verified.protectedHeader;
+      expect(kid).toBeFalsy();
+      expect(act).toBe(teamDevice);
+      expect(iss).toBe(team);
+    });
+    it("signs with owner option.", async function () {
+      const signature = await immutable.sign("foo", {owner: team});
+      const verified = await immutable.verify(signature);
+      const {kid, act, iss} = verified.protectedHeader;
+      expect(kid).toBeFalsy();
+      expect(act).toBe(teamDevice);
+      expect(iss).toBe(team);
+    });
+    it("signs with team options.", async function () {
+      const signature = await immutable.sign("foo", {team});
+      const verified = await immutable.verify(signature);
+      const {kid, act, iss} = verified.protectedHeader;
+      expect(kid).toBeFalsy();
+      expect(act).toBe(teamDevice);
+      expect(iss).toBe(team);
+    });
   });
   it("works after clear.", async function () {
     await Credentials.clear();
