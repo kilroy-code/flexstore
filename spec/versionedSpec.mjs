@@ -1,12 +1,15 @@
+import uuid4 from 'uuid4';
 import { Credentials, VersionedCollection, StateCollection } from '@kilroy-code/flexstore';
 const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expectAsync, URL } = globalThis;
+
+const unique = uuid4();
 
 // TODO: Demonstrate error on double spend.
 describe('VersionedCollection', function () {
   let initialData = {foo: 17}, tag, collection, initialItemData;
   let collections = [];
   async function setup(name = 'versionTest') {
-    collection = new VersionedCollection({name});
+    collection = new VersionedCollection({name: name + unique});
     collections.push(collection);
     tag = Credentials.author = await Credentials.create();
     let stored = await collection.store(initialData, {tag});
@@ -157,7 +160,7 @@ describe('VersionedCollection', function () {
     beforeAll(async function () {
       oldAuthor = Credentials.author;
       Credentials.author = await Credentials.create();
-      collection = new StateCollection({name: 'test-states'});
+      collection = new StateCollection({name: 'test-states' + unique});
     }, 10e3);
     afterAll(async function () {
       await collection.destroy();
@@ -356,7 +359,7 @@ describe('VersionedCollection', function () {
 
       beforeAll(async function() {
 	// Create a deep chain: S99 -> ... S2 -> S1 -> S0
-	collection = new StateTrackingAccess({name: 'tracking'});
+	collection = new StateTrackingAccess({name: 'tracking' + unique});
 	deepStates = [];
 	deepStates[0] = await collection.store({message: "root"});
 
@@ -389,188 +392,197 @@ describe('VersionedCollection', function () {
   });
 
   describe("'put' merging", function () {
-    let singleData = "single", singleTag, singleHash, singleVersionSignature, singleTimestampsSignature, singleTimestamp;
-    let tripleTag, tripleSignatureA, tripleSignatureB;
-    let copyA, copyB, copyC, merged, mergedTimestamps;
-    let author, other, member, restricted;
+    function mergeTest(label) {
+      let suffix = label+unique;
+      describe(label, function () {
+	let singleData = "single", singleTag, singleHash, singleVersionSignature, singleTimestampsSignature, singleTimestamp;
+	let tripleTag, tripleSignatureA, tripleSignatureB;
+	let collection, copyA, copyB, copyC, merged, mergedTimestamps;
+	let author, other, team, owner, restricted;
 
-    // TODO: confirm that this preserves encryption
+	// TODO: confirm that this preserves encryption
 
-    // Make a new collection, and copy the "single" data (state and current hash marker) over to the new copy.
-    // Then store something in the copy so that singleTag locally has a version with name
-    async function copyAndAddOne(name, signingOptions) {
-      const copy = new VersionedCollection({name});
-      await copy.versions.put(singleHash, singleVersionSignature);
-      await copy.put(singleTag, singleTimestampsSignature, true);
-      await copy.store(name, {tag: singleTag, ...signingOptions});
-      return copy;
-    }
-
-    // Copy the single states (not the current hash marker) from source collection to destination collection, and return the last timestamp.
-    async function copyVersions(source, destination) { 
-      let versions = await source.getVersions(singleTag);
-      for (const time of await source.retrieveTimestamps(singleTag)) {
-	const hash = versions[time];
-	destination.versions.put(hash, await source.versions.get(hash));
-      }
-      return versions.latest;
-    }
-
-    beforeAll(async function () {
-      // In these tests:
-      // - author is always the original author of the material.
-      // - owner is the original owner of the material, of which author is idential (FIXME or a member).
-      // - other is someone else that the material passes through, who neither owner nor a member of owner.
-      member = await Credentials.create();
-      let owner = author = Credentials.author = await Credentials.create();
-      let constructionOptions = {author, owner};
-      other = await Credentials.create(); // Not owner.
-      restricted = new Set([other]);
-
-      singleTag = await collection.store(singleData, constructionOptions);    // The toplevel tag at which we stored "single" in collection.
-      const singleVersions = await collection.getVersions(singleTag);     // Originally just one version.
-      singleTimestamp = singleVersions.latest;                            // At this timestamp.
-      singleHash = singleVersions[singleTimestamp];                       // Internally stored in collection.versions at this hash.
-      singleVersionSignature = await collection.versions.get(singleHash); // The signature of that stored version.
-      singleTimestampsSignature = await collection.get(singleTag);        // The signature of timestamp map.
-
-      // Like single, but beginning with three stores, of value 1, 2, and 3.
-      let counter = 1;
-      tripleTag = await collection.store(counter, constructionOptions);
-      await collection.store(++counter, {tag: tripleTag, ...constructionOptions});
-      tripleSignatureA = await collection.get(tripleTag);
-      await collection.store(++counter, {tag: tripleTag, ...constructionOptions});
-      tripleSignatureB = await collection.get(tripleTag);
-
-      // Each copy begins with the same single entry, and then stores another version at singleTag, with the given name.
-      // Each copy thus has two versions at singleTag, where the second version is a different value and timestamp for each copy.
-      copyA = await copyAndAddOne('copyA', constructionOptions);
-      copyB = await copyAndAddOne('copyB', constructionOptions);
-      copyC = await copyAndAddOne('copyC', constructionOptions);
-
-      // Now merge all three into a new empty copy called 'merged'.
-      merged = new VersionedCollection({name: 'merged'});
-      mergedTimestamps = [
-	singleTimestamp,
-	await copyVersions(copyA, merged),
-	await copyVersions(copyB, merged),
-	await copyVersions(copyC, merged),
-      ];
-      // Just for fun, let's put the second one first.
-      await merged.put(singleTag, await copyB.get(singleTag), true);
-      await merged.put(singleTag, await copyA.get(singleTag), true);
-      await merged.put(singleTag, await copyC.get(singleTag), true);
-      merged.debug = false;
-
-      Credentials.author = other;
-    }, 20e3);
-    afterAll(async function () {
-      await copyA.destroy();
-      await copyB.destroy();
-      await copyC.destroy();
-      await merged.destroy();
-      Credentials.author = null;
-      await Credentials.destroy(other);
-      await Credentials.destroy(author);
-    }, 20e3);
-    describe('with owner credentials', function () {
-      it('creates the union of one history on top of another.', async function () {
-	const timestamps = await merged.retrieveTimestamps(singleTag);
-	const latest = await merged.retrieve(singleTag);
-	expect(timestamps).toEqual(mergedTimestamps);
-	expect(latest.text).toBe('copyC');
-      });
-      // it('create the union of multiple separate histories (e.g., as produced by relays that have no ownership).', async function () {
-      // });
-    });
-    describe('without requiring owner credentials', function () {
-      it('keeps the first version.', async function () {
-	const copy = new VersionedCollection({name: 'copy'});
-	await copy.versions.put(singleHash, singleVersionSignature);
-	await copy.put(singleTag, singleTimestampsSignature, true);
-	const retrieved = await copy.retrieve(singleTag);
-	const copyStamps = await copy.retrieveTimestamps(singleTag);
-	expect(singleTimestamp).toBe(retrieved.protectedHeader.iat);
-	expect(await copy.retrieveTimestamps(singleTag)).toEqual([retrieved.protectedHeader.iat]);
-	expect(retrieved.text).toBe(singleData);
-	await copy.destroy();
-      });
-      it('keeps the newer superset when put last.', async function () {
-	const versions = await collection.getVersions(tripleTag);
-	const timestamps = await collection.retrieveTimestamps(tripleTag);
-	const copy = new VersionedCollection({name: 'copy'});
-	for (let time of timestamps) {
-	  const hash = versions[time];
-	  await copy.versions.put(hash, await collection.versions.get(hash));
+	// Make a new collection, and copy the "single" data (state and current hash marker) over to the new copy.
+	// Then store something in the copy so that singleTag locally has a version with name
+	async function copyAndAddOne(name, signingOptions) {
+	  const copy = new VersionedCollection({name: name + suffix});
+	  await copy.versions.put(singleHash, singleVersionSignature);
+	  await copy.put(singleTag, singleTimestampsSignature, true);
+	  await copy.store(name, {tag: singleTag, ...signingOptions});
+	  return copy;
 	}
-	await copy.put(tripleTag, tripleSignatureA);
-	expect((await copy.retrieveTimestamps(tripleTag)).length).toBe(2);
 
-	await copy.put(tripleTag, tripleSignatureB);
-	expect((await copy.retrieveTimestamps(tripleTag)).length).toBe(3);
-
-	expect(await copy.getVersions(tripleTag)).toEqual(versions);
-	expect((await copy.retrieve(tripleTag)).text).toBe('3');
-
-	await copy.destroy();	
-      });
-      it('keeps the newer superset when put first.', async function () {
-	// Same as above, but 'put'ting the final timestamp set first.
-	const versions = await collection.getVersions(tripleTag);
-	const timestamps = await collection.retrieveTimestamps(tripleTag);
-	const copy = new VersionedCollection({name: 'copy'});
-	for (let time of timestamps) {
-	  const hash = versions[time];
-	  await copy.versions.put(hash, await collection.versions.get(hash));
+	// Copy the single states (not the current hash marker) from source collection to destination collection, and return the last timestamp.
+	async function copyVersions(source, destination) {
+	  let versions = await source.getVersions(singleTag);
+	  for (const time of await source.retrieveTimestamps(singleTag)) {
+	    const hash = versions[time];
+	    destination.versions.put(hash, await source.versions.get(hash));
+	  }
+	  return versions.latest;
 	}
-	await copy.put(tripleTag, tripleSignatureB);
-	expect((await copy.retrieveTimestamps(tripleTag)).length).toBe(3);
 
-	await copy.put(tripleTag, tripleSignatureA); // keeps B
-	expect((await copy.retrieveTimestamps(tripleTag)).length).toBe(3);
+	beforeAll(async function () {
+	  // In these tests:
+	  // - author is always the original author of the material.
+	  // - owner is the original owner of the material, of which author is idential or a member. (We test both ways.)
+	  // - other is someone else that the material passes through, who neither owner nor a member of owner.
+	  author = Credentials.author = await Credentials.create();
+	  team = await Credentials.create(author);
+	  owner = label === 'team' ? team : author;
+	  let constructionOptions = {author, owner};
+	  other = await Credentials.create(); // Not owner.
+	  restricted = new Set([other]);
 
-	expect(await copy.getVersions(tripleTag)).toEqual(versions);
-	expect((await copy.retrieve(tripleTag)).text).toBe('3');
+	  collection = new VersionedCollection({name: suffix});
+	  singleTag = await collection.store(singleData, constructionOptions);    // The toplevel tag at which we stored "single" in collection.
+	  const singleVersions = await collection.getVersions(singleTag);     // Originally just one version.
+	  singleTimestamp = singleVersions.latest;                            // At this timestamp.
+	  singleHash = singleVersions[singleTimestamp];                       // Internally stored in collection.versions at this hash.
+	  singleVersionSignature = await collection.versions.get(singleHash); // The signature of that stored version.
+	  singleTimestampsSignature = await collection.get(singleTag);        // The signature of timestamp map.
 
-	await copy.destroy();
-	
+	  // Like single, but beginning with three stores, of value 1, 2, and 3.
+	  let counter = 1;
+	  tripleTag = await collection.store(counter, constructionOptions);
+	  await collection.store(++counter, {tag: tripleTag, ...constructionOptions});
+	  tripleSignatureA = await collection.get(tripleTag);
+	  await collection.store(++counter, {tag: tripleTag, ...constructionOptions});
+	  tripleSignatureB = await collection.get(tripleTag);
+
+	  // Each copy begins with the same single entry, and then stores another version at singleTag, with the given name.
+	  // Each copy thus has two versions at singleTag, where the second version is a different value and timestamp for each copy.
+	  copyA = await copyAndAddOne('copyA', constructionOptions);
+	  copyB = await copyAndAddOne('copyB', constructionOptions);
+	  copyC = await copyAndAddOne('copyC', constructionOptions);
+
+	  // Now merge all three into a new empty copy called 'merged'.
+	  merged = new VersionedCollection({name: 'merged' + suffix});
+	  mergedTimestamps = [
+	    singleTimestamp,
+	    await copyVersions(copyA, merged),
+	    await copyVersions(copyB, merged),
+	    await copyVersions(copyC, merged),
+	  ];
+	  // Just for fun, let's put the second one first.
+	  await merged.put(singleTag, await copyB.get(singleTag), true);
+	  await merged.put(singleTag, await copyA.get(singleTag), true);
+	  await merged.put(singleTag, await copyC.get(singleTag), true);
+	  merged.debug = false;
+
+	  Credentials.author = other;
+	}, 20e3);
+	afterAll(async function () {
+	  await copyA.destroy();
+	  await copyB.destroy();
+	  await copyC.destroy();
+	  await merged.destroy();
+	  Credentials.author = null;
+	  await Credentials.destroy(other);
+	  await Credentials.destroy(team);
+	  await Credentials.destroy(author);
+	}, 20e3);
+	describe('with owner credentials', function () {
+	  it('creates the union of one history on top of another.', async function () {
+	    const timestamps = await merged.retrieveTimestamps(singleTag);
+	    const latest = await merged.retrieve(singleTag);
+	    expect(timestamps).toEqual(mergedTimestamps);
+	    expect(latest.text).toBe('copyC');
+	  });
+	  // it('create the union of multiple separate histories (e.g., as produced by relays that have no ownership).', async function () {
+	  // });
+	});
+	describe('without requiring owner credentials', function () {
+	  it('keeps the first version.', async function () {
+	    const copy = new VersionedCollection({name: 'copy' + suffix});
+	    await copy.versions.put(singleHash, singleVersionSignature);
+	    await copy.put(singleTag, singleTimestampsSignature, true);
+	    const retrieved = await copy.retrieve(singleTag);
+	    const copyStamps = await copy.retrieveTimestamps(singleTag);
+	    expect(singleTimestamp).toBe(retrieved.protectedHeader.iat);
+	    expect(await copy.retrieveTimestamps(singleTag)).toEqual([retrieved.protectedHeader.iat]);
+	    expect(retrieved.text).toBe(singleData);
+	    await copy.destroy();
+	  });
+	  it('keeps the newer superset when put last.', async function () {
+	    const versions = await collection.getVersions(tripleTag);
+	    const timestamps = await collection.retrieveTimestamps(tripleTag);
+	    const copy = new VersionedCollection({name: 'copy' + suffix});
+	    for (let time of timestamps) {
+	      const hash = versions[time];
+	      await copy.versions.put(hash, await collection.versions.get(hash));
+	    }
+	    await copy.put(tripleTag, tripleSignatureA);
+	    expect((await copy.retrieveTimestamps(tripleTag)).length).toBe(2);
+
+	    await copy.put(tripleTag, tripleSignatureB);
+	    expect((await copy.retrieveTimestamps(tripleTag)).length).toBe(3);
+
+	    expect(await copy.getVersions(tripleTag)).toEqual(versions);
+	    expect((await copy.retrieve(tripleTag)).text).toBe('3');
+
+	    await copy.destroy();
+	  });
+	  it('keeps the newer superset when put first.', async function () {
+	    // Same as above, but 'put'ting the final timestamp set first.
+	    const versions = await collection.getVersions(tripleTag);
+	    const timestamps = await collection.retrieveTimestamps(tripleTag);
+	    const copy = new VersionedCollection({name: 'copy' + suffix});
+	    for (let time of timestamps) {
+	      const hash = versions[time];
+	      await copy.versions.put(hash, await collection.versions.get(hash));
+	    }
+	    await copy.put(tripleTag, tripleSignatureB);
+	    expect((await copy.retrieveTimestamps(tripleTag)).length).toBe(3);
+
+	    await copy.put(tripleTag, tripleSignatureA); // keeps B
+	    expect((await copy.retrieveTimestamps(tripleTag)).length).toBe(3);
+
+	    expect(await copy.getVersions(tripleTag)).toEqual(versions);
+	    expect((await copy.retrieve(tripleTag)).text).toBe('3');
+
+	    await copy.destroy();
+	  });
+	  it('keeps multiple histories separate when they conflict.', async function () {
+
+	    // Just like in the signed merged, except that we now explicitly use a non-member's credentials,
+	    // as would be the case on a relay server.
+	    // Internally, the signature is in two separate, individually signed parts.
+
+	    const nonMemberHolding = new VersionedCollection({name: 'nonMemberHolding' + suffix});
+	    nonMemberHolding.restrictedTags = restricted;
+	    await copyVersions(copyA, nonMemberHolding);
+	    await copyVersions(copyB, nonMemberHolding);
+	    await copyVersions(copyC, nonMemberHolding);
+	    // Just for fun, let's put the second one first.
+	    await nonMemberHolding.put(singleTag, await copyB.get(singleTag), true);
+	    await nonMemberHolding.put(singleTag, await copyA.get(singleTag), true);
+	    await nonMemberHolding.put(singleTag, await copyC.get(singleTag), true);
+
+	    // The nonMemberHolding result is in limbo. It does not have one single merged set of timestamps.
+	    // But we can confirm that it has not been anonymously merged:
+	    const stateVerification = await nonMemberHolding.getVerified(singleTag);
+	    const states = stateVerification.json;
+	    expect(nonMemberHolding.getOwner(stateVerification.protectedHeader)).toBe(owner);
+	    expect(states.length).toBe(3); // nonmember merge of a, b, and c.
+
+	    // And we can merge it properly with authorization.
+	    Credentials.author = author;
+	    delete nonMemberHolding.restrictedTags;
+	    await nonMemberHolding.put(singleTag, stateVerification.signature, true); // An owner jiggles the handle.
+	    const restatedVerification = await nonMemberHolding.getVerified(singleTag);
+	    expect(restatedVerification.json.length).toBe(1);
+	    expect(await nonMemberHolding.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);
+	    expect((await nonMemberHolding.retrieve(singleTag)).text).toBe('copyC');
+
+	    Credentials.author = null;
+
+	    await nonMemberHolding.destroy();
+	  }, 10e3);
+	});
       });
-      it('keeps multiple histories separate when they conflict.', async function () {
-
-	// Just like in the signed merged, except that we now explicitly use a non-member's credentials,
-	// as would be the case on a relay server.
-	// Internally, the signature is in two separate, individually signed parts.
-
-	const nonMemberHolding = new VersionedCollection({name: 'nonMemberHolding'});
-	nonMemberHolding.restrictedTags = restricted;
-	await copyVersions(copyA, nonMemberHolding);
-	await copyVersions(copyB, nonMemberHolding);
-	await copyVersions(copyC, nonMemberHolding);
-	// Just for fun, let's put the second one first.
-	await nonMemberHolding.put(singleTag, await copyB.get(singleTag), true);
-	await nonMemberHolding.put(singleTag, await copyA.get(singleTag), true);
-	await nonMemberHolding.put(singleTag, await copyC.get(singleTag), true);
-
-	// The nonMemberHolding result is in limbo. It does not have one single merged set of timestamps.
-	// But we can confirm that it has not been anonymously merged:
-	const stateVerification = await nonMemberHolding.getVerified(singleTag);
-	const states = stateVerification.json;
-	expect(nonMemberHolding.getOwner(stateVerification.protectedHeader)).toBe(author);
-	expect(states.length).toBe(3); // nonmember merge of a, b, and c.
-
-	// And we can merge it properly with authorization.
-	Credentials.author = author;
-	delete nonMemberHolding.restrictedTags;
-	await nonMemberHolding.put(singleTag, stateVerification.signature, true); // An owner jiggles the handle.
-	const restatedVerification = await nonMemberHolding.getVerified(singleTag);
-	expect(restatedVerification.json.length).toBe(1);
-	expect(await nonMemberHolding.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);
-	expect((await nonMemberHolding.retrieve(singleTag)).text).toBe('copyC');
-
-	Credentials.author = null;
-
-	await nonMemberHolding.destroy();
-      }, 10e3);
-    });
+    }
+    mergeTest('author');
+    mergeTest('team');
   });
 });
