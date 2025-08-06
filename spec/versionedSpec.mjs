@@ -400,8 +400,6 @@ describe('VersionedCollection', function () {
 	let collection, copyA, copyB, copyC, merged, mergedTimestamps;
 	let author, other, team, owner, restricted;
 
-	// TODO: confirm that this preserves encryption
-
 	// Make a new collection, and copy the "single" data (state and current hash marker) over to the new copy.
 	// Then store something in the copy so that singleTag locally has a version with name
 	async function copyAndAddOne(name, signingOptions) {
@@ -433,6 +431,7 @@ describe('VersionedCollection', function () {
 	  let constructionOptions = {author, owner};
 	  other = await Credentials.create(); // Not owner.
 	  restricted = new Set([other]);
+	  Credentials.encryption = 'owner';
 
 	  collection = new VersionedCollection({name: suffix});
 	  singleTag = await collection.store(singleData, constructionOptions);    // The toplevel tag at which we stored "single" in collection.
@@ -468,7 +467,6 @@ describe('VersionedCollection', function () {
 	  await merged.put(singleTag, await copyB.get(singleTag), true);
 	  await merged.put(singleTag, await copyA.get(singleTag), true);
 	  await merged.put(singleTag, await copyC.get(singleTag), true);
-	  merged.debug = false;
 
 	  Credentials.author = other;
 	}, 20e3);
@@ -478,6 +476,7 @@ describe('VersionedCollection', function () {
 	  await copyC.destroy();
 	  await merged.destroy();
 	  Credentials.author = null;
+	  Credentials.encryption = null;
 	  await Credentials.destroy(other);
 	  await Credentials.destroy(team);
 	  await Credentials.destroy(author);
@@ -548,6 +547,9 @@ describe('VersionedCollection', function () {
 	    // Just like in the signed merged, except that we now explicitly use a non-member's credentials,
 	    // as would be the case on a relay server.
 	    // Internally, the signature is in two separate, individually signed parts.
+	    const latestCopyAVerified = await copyA.retrieve(singleTag);
+	    expect(latestCopyAVerified.protectedHeader.encryption).toBe(owner);
+	    expect(latestCopyAVerified.protectedHeader.cty).toContain('encrypted');
 
 	    const nonMemberHolding = new VersionedCollection({name: 'nonMemberHolding' + suffix});
 	    nonMemberHolding.restrictedTags = restricted;
@@ -574,6 +576,10 @@ describe('VersionedCollection', function () {
 	    expect(restatedVerification.json.length).toBe(1);
 	    expect(await nonMemberHolding.retrieveTimestamps(singleTag)).toEqual(mergedTimestamps);
 	    expect((await nonMemberHolding.retrieve(singleTag)).text).toBe('copyC');
+
+	    const currentStateVerification = await nonMemberHolding.retrieve(singleTag);
+	    expect(currentStateVerification.protectedHeader.encryption).toBe(owner);
+	    expect(currentStateVerification.protectedHeader.cty).toContain('encrypted');
 
 	    Credentials.author = null;
 

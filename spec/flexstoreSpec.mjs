@@ -45,14 +45,15 @@ describe('Flexstore', function () {
 	};
 	tag = await collection.store(data); // author/owner is user/null
 	expect(updateCount).toBe(1);
-	if (label !== 'StateCollection') expect(latestUpdate.protectedHeader.sub).toBe(tag);
+	if (!['StateCollection', 'VersionedCollection'].includes(label)) // tag includes antecedent/time.
+	  expect(latestUpdate.protectedHeader.sub).toBe(tag);
 	expect(latestUpdate.json).toEqual(data);
       });
       afterAll(async function () {
 	updateCount = 0;
 	await collection.remove({tag});
 	expect(updateCount).toBe(1);
-	if (label !== 'StateCollection') expect(latestUpdate.protectedHeader.sub).toBe(tag);
+	expect(latestUpdate.protectedHeader.sub).toBe(tag);
 	expect(latestUpdate.json).toBeFalsy();
 	const signature = await collection.retrieve(tag);
 	expect(signature?.json).toBeUndefined();

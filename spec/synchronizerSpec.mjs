@@ -74,7 +74,6 @@ describe('Synchronizer', function () {
 	let members = (await Credentials.collections.Team.retrieve(author)).json.recipients.map(m => m.header.kid);
 	[device, recovery] = members;
 	if (!await Credentials.collections.KeyRecovery.get(recovery)) {
-	  console.log('\n\n\n*** swapping device/recovery members ***\n\n');
 	  [recovery, device] = members;
 	  expect(await Credentials.collections.KeyRecovery.get(recovery)).toBeTruthy();
 	}
@@ -617,10 +616,10 @@ describe('Synchronizer', function () {
 		//   b gets 123 (which it didn't have) and a reconciled value for abc (of which it had the wrong sig).
 		let aUpdates = [              'bar', 'foo', 'red', 'white', 'xyz'];
 		let bUpdates = ['123', 'abc', 'bar', 'foo', 'red', 'white'];
-		// For VersionedCollection both sides have a unique 'abc' to tell the other about, plus a merge artifact.
+		// For VersionedCollection both sides have a unique 'abc' to tell the other about, plus merge artifacts (3 each).
 		if (label === 'VersionedCollection') {
-		  aUpdates = ['abc', 'abc', ...aUpdates];
-		  bUpdates = ['abc', ...bUpdates];
+		  aUpdates = ['abc', 'abc', 'abc', ...aUpdates];
+		  bUpdates = ['abc', 'abc', ...bUpdates];
 		}
 		Credentials.owner = owner;
 
