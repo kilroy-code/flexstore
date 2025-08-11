@@ -350,6 +350,7 @@ describe('Synchronizer', function () {
 	    await setup({minVersion: 1, maxVersion: 2}, {minVersion: 3, maxVersion: 4});
 	    expect(await a.version).toBe(0);
 	    expect(await b.version).toBe(0);
+	    await new Promise(resolve => setTimeout(resolve, 1e3)); // Ugh. Why is the time delay disconnect in the version-matching code causing a failure in the NEXT test?
 	    await teardown();
 	  }, CONNECT_TIME);
 	});
