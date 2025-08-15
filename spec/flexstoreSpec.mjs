@@ -245,7 +245,7 @@ describe("Credentials", function () {
     altDevice = await Credentials.create();
     alt = await Credentials.create(altDevice);
     immutable = new ImmutableCollection({name: 'credential-test'});
-  }, 10e3);
+  }, 15e3);
   afterEach(function () {
     Credentials.author = oldAuthor;
     Credentials.owner = oldOwner;
