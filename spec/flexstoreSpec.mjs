@@ -254,6 +254,85 @@ describe("Credentials", function () {
     await Credentials.destroy({tag: team, recursiveMembers: true});
     await Credentials.destroy({tag: alt, recursiveMembers: true});
   });
+  describe("restriction for testing", function () {
+    let encryptedTag;
+    beforeAll(async function () {
+      encryptedTag = await immutable.store('secret', {author: team, encryption: team});
+      immutable.restrictedTags = new Set([teamDevice]);
+    });
+    afterAll(async function () {
+      delete immutable.restrictedTags;
+      await immutable.remove({tag: encryptedTag, author: team});
+    });
+    it("prevents unauthorized signing.", async function () {
+      expect(await immutable.store('foo baz', {author: alt}).catch(() => null)).toBeFalsy();
+    });
+    it("prevents unauthorized decrypting.", async function () {
+      await immutable.withRestrictedTags([alt, altDevice], async () => {
+	const verified = await immutable.retrieve(encryptedTag).catch(() => null);
+	expect(verified).toBeFalsy();
+      });
+    });
+    it("allows authorized signing-dependent operations.", async function () {
+      let tag = await immutable.store('foo bar', {author: team});
+      expect(tag).toBeTruthy();
+      expect(await immutable.retrieve(tag)).toBeTruthy();
+      expect(await immutable.remove({tag, author: team})).toBeTruthy();
+      expect(await immutable.retrieve(tag)).toBeFalsy();
+    });
+    it("allows authorized decrypting.", async function () {
+      let verified = await immutable.retrieve(encryptedTag);
+      expect(verified.text).toBe('secret');
+      expect(verified.protectedHeader.encryption).toBe(team);
+    });
+    describe("tooling", function () {
+      let author, deviceTag, recoveryTag, other;
+      const prompt = "q1", authorAnswer = "foo", otherAnswer = "bar";
+      beforeAll(async function () {
+	Credentials.setAnswer(prompt, authorAnswer);
+	author = await Credentials.createAuthor(prompt);
+	const members = await Credentials.teamMembers(author);
+	deviceTag = await Promise.any(members.map(async tag => (!await Credentials.collections.KeyRecovery.get(tag)) && tag));
+	recoveryTag = members[0] === deviceTag ? members[1] : members[0];
+	expect(await Credentials.collections.Team.get(author)).toBeTruthy();
+	expect(await Credentials.collections.KeyRecovery.get(recoveryTag)).toBeTruthy();
+	// No access to device key.
+	expect(await Credentials.collections.EncryptionKey.get(author)).toBeTruthy();
+	expect(await Credentials.collections.EncryptionKey.get(recoveryTag)).toBeTruthy();
+	expect(await Credentials.collections.EncryptionKey.get(deviceTag)).toBeTruthy();
+
+	Credentials.setAnswer(prompt, otherAnswer);
+	other = await Credentials.createAuthor(prompt);
+      }, 15e3);
+      afterAll(async function () {
+	Credentials.setAnswer(prompt, otherAnswer);
+	await Credentials.destroy({tag: other, recursiveMembers: true});
+
+	Credentials.setAnswer(prompt, authorAnswer);
+	await Credentials.destroy({tag: author, recursiveMembers: true});
+	expect(await Credentials.collections.Team.get(author)).toBeFalsy();
+	expect(await Credentials.collections.KeyRecovery.get(recoveryTag)).toBeFalsy();
+	// No access to device key.
+	expect(await Credentials.collections.EncryptionKey.get(author)).toBeFalsy();
+	expect(await Credentials.collections.EncryptionKey.get(recoveryTag)).toBeFalsy();
+	expect(await Credentials.collections.EncryptionKey.get(deviceTag)).toBeFalsy();
+
+      });
+      it("can be restricted for testing and then unrestricted.", async function () {
+	let collection = new MutableCollection({name: 'test-restriction'});
+	await Credentials.clear();
+	expect(await collection.sign('x', {author: deviceTag})).toBeTruthy();
+	expect(await collection.sign('x', {author})).toBeTruthy();
+	expect(await collection.sign('x', {author: other})).toBeTruthy();
+	await collection.withRestrictedTags([author, deviceTag], async () => {
+	  expect(await collection.sign('x', {author})).toBeTruthy();
+	  expect(await collection.sign('x', {author: other}).catch(()=> null)).toBeFalsy();
+	});
+	expect(await collection.sign('x', {author: deviceTag})).toBeTruthy();
+	expect(await collection.sign('x', {author})).toBeTruthy();
+      });
+    });
+  });
   describe('specifying author', function () {
     it("signs with Credentials.author.", async function () {
       Credentials.author = teamDevice;

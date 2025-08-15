@@ -6,7 +6,7 @@ const { describe, beforeAll, afterAll, beforeEach, afterEach, it, expect, expect
 Object.assign(globalThis, {Credentials, Collection, ImmutableCollection, MutableCollection, StateCollection, VersionedCollection, SharedWebRTC}); // for debugging
 const baseURL = globalThis.document?.baseURI || 'http://localhost:3000';
 
-const CONNECT_TIME = 20e3;
+const CONNECT_TIME = 25e3;
 const unique = uuid4();
 
 function delay(ms) {
