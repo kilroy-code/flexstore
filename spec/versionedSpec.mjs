@@ -433,7 +433,7 @@ describe('VersionedCollection', function () {
 	  restricted = new Set([other]);
 	  Credentials.encryption = 'owner';
 
-	  collection = new VersionedCollection({name: suffix});
+	  collection = new VersionedCollection({name: 'initial' + suffix});
 	  singleTag = await collection.store(singleData, constructionOptions);    // The toplevel tag at which we stored "single" in collection.
 	  const singleVersions = await collection.getVersions(singleTag);     // Originally just one version.
 	  singleTimestamp = singleVersions.latest;                            // At this timestamp.
@@ -471,6 +471,7 @@ describe('VersionedCollection', function () {
 	  Credentials.author = other;
 	}, 20e3);
 	afterAll(async function () {
+	  await collection.destroy();
 	  await copyA.destroy();
 	  await copyB.destroy();
 	  await copyC.destroy();
@@ -493,7 +494,7 @@ describe('VersionedCollection', function () {
 	});
 	describe('without requiring owner credentials', function () {
 	  it('keeps the first version.', async function () {
-	    const copy = new VersionedCollection({name: 'copy' + suffix});
+	    const copy = new VersionedCollection({name: 'copy-keep-first' + suffix});
 	    await copy.versions.put(singleHash, singleVersionSignature);
 	    await copy.put(singleTag, singleTimestampsSignature, true);
 	    const retrieved = await copy.retrieve(singleTag);
@@ -506,7 +507,7 @@ describe('VersionedCollection', function () {
 	  it('keeps the newer superset when put last.', async function () {
 	    const versions = await collection.getVersions(tripleTag);
 	    const timestamps = await collection.retrieveTimestamps(tripleTag);
-	    const copy = new VersionedCollection({name: 'copy' + suffix});
+	    const copy = new VersionedCollection({name: 'copy-keep-last' + suffix});
 	    for (let time of timestamps) {
 	      const hash = versions[time];
 	      await copy.versions.put(hash, await collection.versions.get(hash));
@@ -526,7 +527,7 @@ describe('VersionedCollection', function () {
 	    // Same as above, but 'put'ting the final timestamp set first.
 	    const versions = await collection.getVersions(tripleTag);
 	    const timestamps = await collection.retrieveTimestamps(tripleTag);
-	    const copy = new VersionedCollection({name: 'copy' + suffix});
+	    const copy = new VersionedCollection({name: 'copy-keep-fiirst' + suffix});
 	    for (let time of timestamps) {
 	      const hash = versions[time];
 	      await copy.versions.put(hash, await collection.versions.get(hash));

@@ -398,7 +398,7 @@ describe("Credentials", function () {
   describe("restricted", function () {
     let collection;
     beforeAll(async function () {
-      collection = new MutableCollection({restrictedTags: new Set([alt, altDevice])});
+      collection = new MutableCollection({name: 'restricted', restrictedTags: new Set([alt, altDevice])});
     });
     it("forbids use of unenumerated tags.", async function () {
       expect(await collection.sign('something', {team: team}).catch(() => false)).toBeFalsy();
